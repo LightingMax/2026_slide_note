@@ -11,6 +11,9 @@ export interface Slide {
   title: string
   text: string
   notes: string
+  snapshot_url?: string | null
+  render_status: 'pending' | 'ready' | 'missing' | 'unavailable'
+  render_error?: string | null
   assets: SlideAsset[]
 }
 

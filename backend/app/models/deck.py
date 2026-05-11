@@ -14,6 +14,9 @@ class Slide(BaseModel):
     title: str
     text: str
     notes: str
+    snapshot_url: str | None = None
+    render_status: str = "pending"
+    render_error: str | None = None
     assets: list[SlideAsset] = Field(default_factory=list)
 
 
@@ -41,4 +44,3 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     text: str
-

@@ -19,6 +19,23 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 --app-dir backend
 
 Set `ARK_API_KEY` in your shell or `backend/.env`. Do not commit real API keys.
 
+### PPT Snapshot Rendering
+
+Slide Note can render real slide snapshots when LibreOffice is available on the backend machine.
+
+```bash
+# macOS example
+brew install --cask libreoffice
+```
+
+If `soffice` is not on `PATH`, set `LIBREOFFICE_PATH` in `backend/.env`:
+
+```bash
+LIBREOFFICE_PATH=/Applications/LibreOffice.app/Contents/MacOS/soffice
+```
+
+The upload flow will convert PPTX to PDF with LibreOffice, then render each PDF page to PNG with PyMuPDF. If LibreOffice is missing, the app falls back to the parsed preview and keeps text, notes, media, and AI chat available.
+
 ## Frontend
 
 ```bash
@@ -35,4 +52,3 @@ pnpm build
 ```
 
 You can override it with `VITE_BUILD_OUT_DIR`.
-

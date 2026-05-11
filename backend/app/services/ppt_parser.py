@@ -7,6 +7,7 @@ from pptx import Presentation
 
 from app.core.config import get_settings
 from app.models.deck import Deck, Slide, SlideAsset
+from app.services.ppt_renderer import render_deck_snapshots
 
 
 MEDIA_EXTENSIONS = {
@@ -60,12 +61,13 @@ def parse_pptx(source_path: Path, original_filename: str) -> Deck:
             )
         )
 
-    return Deck(
+    deck = Deck(
         id=deck_id,
         filename=original_filename,
         created_at=datetime.now(timezone.utc).isoformat(),
         slides=slides,
     )
+    return render_deck_snapshots(deck, copied_path)
 
 
 def _extract_slide_media(slide, deck_id: str, deck_media_dir: Path) -> list[SlideAsset]:

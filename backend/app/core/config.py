@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     data_dir: Path = BASE_DIR / "data"
     media_dir: Path = BASE_DIR / "media"
     static_dir: Path = BASE_DIR / "static"
+    libreoffice_path: str = ""
+    slide_render_dpi: int = 160
+    slide_render_timeout: int = 120
 
     model_config = SettingsConfigDict(env_file=BASE_DIR / ".env", env_file_encoding="utf-8")
 
@@ -33,4 +36,3 @@ def get_settings() -> Settings:
     settings.media_dir.mkdir(parents=True, exist_ok=True)
     settings.static_dir.mkdir(parents=True, exist_ok=True)
     return settings
-

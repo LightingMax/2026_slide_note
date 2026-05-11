@@ -80,6 +80,17 @@ html.dark body {
   box-shadow: 0 18px 48px rgb(15 23 42 / 0.16);
 }
 
+.slide-rendered-image {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 4px;
+  border: 1px solid #d7dde7;
+  background: #ffffff;
+  object-fit: contain;
+  box-shadow: 0 18px 48px rgb(15 23 42 / 0.16);
+}
+
 .slide-sheet::before {
   position: absolute;
   inset: 0;

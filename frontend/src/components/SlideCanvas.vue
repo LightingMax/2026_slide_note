@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Files, Picture, VideoCameraFilled } from '@element-plus/icons-vue'
+import { Files, Picture, Refresh, VideoCameraFilled } from '@element-plus/icons-vue'
 import { computed } from 'vue'
 
 import { useDeckStore } from '@/stores/deck'
@@ -17,6 +17,13 @@ const previewLines = computed(() => {
     .filter(Boolean)
     .slice(1, 8)
 })
+const renderLabel = computed(() => {
+  const status = deckStore.activeSlide?.render_status
+  if (status === 'ready') return '真实快照'
+  if (status === 'missing') return '缺少页面'
+  if (status === 'unavailable') return '解析预览'
+  return '等待渲染'
+})
 </script>
 
 <template>
@@ -26,12 +33,42 @@ const previewLines = computed(() => {
         <p class="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">Slide Snapshot</p>
         <h2 class="mt-1 text-base font-semibold">{{ deckStore.activeSlide?.title || '等待上传 PPT' }}</h2>
       </div>
-      <el-tag v-if="deckStore.activeSlide">第 {{ deckStore.activeSlide.index }} 页</el-tag>
+      <div v-if="deckStore.activeSlide" class="flex items-center gap-2">
+        <el-tag :type="deckStore.activeSlide.render_status === 'ready' ? 'success' : 'warning'">
+          {{ renderLabel }}
+        </el-tag>
+        <el-tag>第 {{ deckStore.activeSlide.index }} 页</el-tag>
+        <el-button
+          size="small"
+          :icon="Refresh"
+          :loading="deckStore.loading"
+          @click="deckStore.rerenderSnapshots"
+        >
+          重渲染
+        </el-button>
+      </div>
     </div>
 
     <el-scrollbar class="min-h-0 flex-1">
       <section v-if="deckStore.activeSlide" class="space-y-4 p-5">
-        <div class="slide-stage">
+        <div v-if="deckStore.activeSlide.snapshot_url" class="slide-stage">
+          <img
+            :src="deckStore.activeSlide.snapshot_url"
+            :alt="deckStore.activeSlide.title"
+            class="slide-rendered-image"
+          />
+        </div>
+
+        <el-alert
+          v-else-if="deckStore.activeSlide.render_status === 'unavailable'"
+          type="warning"
+          :closable="false"
+          show-icon
+          title="PPT 渲染服务未启用，当前显示解析预览。"
+          :description="deckStore.activeSlide.render_error || '请在后端安装 LibreOffice，并可选配置 LIBREOFFICE_PATH。'"
+        />
+
+        <div v-if="!deckStore.activeSlide.snapshot_url" class="slide-stage">
           <div class="slide-sheet">
             <div class="slide-ribbon">预览快照</div>
             <h3>{{ deckStore.activeSlide.title }}</h3>

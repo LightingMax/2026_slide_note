@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 
-import { fetchDecks, requestNoteDraft, updateSlideNotes, uploadDeck } from '@/api/decks'
+import { fetchDecks, renderDeck, requestNoteDraft, updateSlideNotes, uploadDeck } from '@/api/decks'
 import type { ActivityItem, ChatMessage, Deck, Slide } from '@/types/deck'
 
 const chatStorageKey = 'slide-note-chat-history'
@@ -80,6 +80,21 @@ export const useDeckStore = defineStore('deck', () => {
     addActivity('保存备注', `${activeSlide.value?.title || '当前页'}，${notes.length} 字`)
   }
 
+  async function rerenderSnapshots() {
+    if (!activeDeck.value) return
+    loading.value = true
+    try {
+      activeDeck.value = await renderDeck(activeDeck.value.id)
+      decks.value = decks.value.map((deck) => (deck.id === activeDeck.value?.id ? activeDeck.value : deck))
+      const status = activeDeck.value.slides.some((slide) => slide.render_status === 'ready')
+        ? '已生成真实 PPT 快照'
+        : activeDeck.value.slides[0]?.render_error || '渲染服务不可用'
+      addActivity('重新渲染快照', status)
+    } finally {
+      loading.value = false
+    }
+  }
+
   async function askAssistant(instruction: string) {
     if (!activeDeck.value || !activeSlideId.value) return ''
     chatMessages.value.push({ role: 'user', content: instruction })
@@ -125,6 +140,7 @@ export const useDeckStore = defineStore('deck', () => {
     upload,
     saveNotes,
     askAssistant,
+    rerenderSnapshots,
     addActivity
   }
 })

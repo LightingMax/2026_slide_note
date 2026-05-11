@@ -18,6 +18,11 @@ export async function updateSlideNotes(deckId: string, slideId: string, notes: s
   return data
 }
 
+export async function renderDeck(deckId: string) {
+  const { data } = await http.post<Deck>(`/decks/${deckId}/render`)
+  return data
+}
+
 export async function requestNoteDraft(
   deckId: string,
   slideId: string,
@@ -31,4 +36,3 @@ export async function requestNoteDraft(
   })
   return data.text
 }
-
