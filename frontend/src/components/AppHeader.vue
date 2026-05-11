@@ -19,10 +19,10 @@ async function handleUpload(options: UploadRequestOptions) {
 </script>
 
 <template>
-  <header class="flex h-16 items-center justify-between border-b border-line bg-white px-5 dark:border-slate-700 dark:bg-slate-900">
+  <header class="flex h-16 items-center justify-between border-b border-slate-200 bg-white px-5 dark:border-slate-700 dark:bg-slate-950">
     <div>
       <h1 class="text-lg font-semibold tracking-normal text-ink dark:text-slate-100">Slide Note</h1>
-      <p class="text-xs text-slate-500 dark:text-slate-400">PPT 备注生成与语音播报文案编辑</p>
+      <p class="text-xs text-slate-500 dark:text-slate-400">解析 PPT，整理备注，生成适合语音播报的讲稿</p>
     </div>
 
     <div class="flex items-center gap-3">
@@ -42,4 +42,3 @@ async function handleUpload(options: UploadRequestOptions) {
     </div>
   </header>
 </template>
-

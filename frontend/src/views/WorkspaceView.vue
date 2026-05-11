@@ -21,9 +21,9 @@ function applyAssistantText(value: string) {
 </script>
 
 <template>
-  <div class="flex h-screen flex-col bg-paper dark:bg-slate-900">
+  <div class="flex h-screen flex-col bg-[#eef2f7] dark:bg-slate-900">
     <AppHeader />
-    <div class="grid min-h-0 flex-1 grid-cols-[240px_minmax(0,1fr)_360px] gap-4 p-4">
+    <div class="grid min-h-0 flex-1 grid-cols-[260px_minmax(0,1fr)_390px] gap-4 p-4">
       <SlideNavigator />
       <div class="flex min-h-0 flex-col gap-4">
         <SlideCanvas />
@@ -33,4 +33,3 @@ function applyAssistantText(value: string) {
     </div>
   </div>
 </template>
-

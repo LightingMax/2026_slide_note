@@ -26,3 +26,9 @@ export interface ChatMessage {
   content: string
 }
 
+export interface ActivityItem {
+  id: string
+  time: string
+  title: string
+  detail: string
+}

@@ -1,4 +1,4 @@
-from openai import OpenAI
+from openai import APIError, AuthenticationError, OpenAI
 
 from app.core.config import get_settings
 from app.models.deck import Slide
@@ -22,6 +22,10 @@ def generate_note(slide: Slide, instruction: str, history: list[dict[str, str]])
     messages.extend(history[-8:])
     messages.append({"role": "user", "content": prompt})
 
-    response = client.responses.create(model=settings.ark_model, input=messages)
+    try:
+        response = client.responses.create(model=settings.ark_model, input=messages)
+    except AuthenticationError as exc:
+        raise RuntimeError("ARK_API_KEY 无效或未授权，请检查火山方舟控制台中的 API Key。") from exc
+    except APIError as exc:
+        raise RuntimeError(f"模型服务请求失败：{exc.message}") from exc
     return getattr(response, "output_text", "") or str(response)
-

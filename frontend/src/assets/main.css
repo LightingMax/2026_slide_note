@@ -16,7 +16,7 @@ html.dark {
 body {
   margin: 0;
   min-width: 320px;
-  background: #f7f9fc;
+  background: #eef2f7;
   color: #17202a;
 }
 
@@ -32,5 +32,77 @@ html.dark body {
 .workspace-panel {
   border: 1px solid var(--el-border-color);
   background: var(--el-bg-color);
+  box-shadow: 0 16px 40px rgb(15 23 42 / 0.08);
 }
 
+.assistant-tabs {
+  display: flex;
+  flex-direction: column;
+}
+
+.assistant-tabs .el-tabs__header {
+  margin: 0;
+  padding: 0 12px;
+}
+
+.assistant-tabs .el-tabs__content {
+  min-height: 0;
+  flex: 1;
+}
+
+.assistant-tabs .el-tab-pane {
+  height: 100%;
+}
+
+.assistant-scroll {
+  height: 100%;
+}
+
+.slide-stage {
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  background: #dbe3ee;
+  padding: 18px;
+}
+
+.slide-sheet {
+  position: relative;
+  display: flex;
+  min-height: 420px;
+  aspect-ratio: 16 / 9;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 4px;
+  border: 1px solid #d7dde7;
+  background: #ffffff;
+  padding: 42px 48px;
+  color: #17202a;
+  box-shadow: 0 18px 48px rgb(15 23 42 / 0.16);
+}
+
+.slide-sheet::before {
+  position: absolute;
+  inset: 0;
+  border-top: 8px solid #246b8f;
+  content: "";
+  pointer-events: none;
+}
+
+.slide-sheet h3 {
+  max-width: 78%;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.slide-ribbon {
+  position: absolute;
+  right: 28px;
+  top: 26px;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 12px;
+}

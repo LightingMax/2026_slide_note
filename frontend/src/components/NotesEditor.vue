@@ -38,10 +38,10 @@ defineExpose({ replaceText })
 
 <template>
   <section class="workspace-panel flex h-64 flex-col rounded-md">
-    <div class="flex items-center justify-between border-b border-line px-4 py-3 dark:border-slate-700">
+    <div class="flex items-center justify-between border-b border-line px-5 py-3 dark:border-slate-700">
       <div class="flex items-center gap-2 text-sm font-medium">
         <el-icon><DocumentChecked /></el-icon>
-        <span>备注</span>
+        <span>语音备注</span>
       </div>
       <el-button size="small" type="primary" :loading="saving" @click="save">保存</el-button>
     </div>
@@ -55,4 +55,3 @@ defineExpose({ replaceText })
     />
   </section>
 </template>
-
