@@ -30,7 +30,7 @@ const renderLabel = computed(() => {
   <main class="workspace-panel flex min-h-0 flex-col rounded-md">
     <div class="flex items-center justify-between border-b border-line px-5 py-4 dark:border-slate-700">
       <div>
-        <p class="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">Slide Snapshot</p>
+        <p class="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">页面快照</p>
         <h2 class="mt-1 text-base font-semibold">{{ deckStore.activeSlide?.title || '等待上传 PPT' }}</h2>
       </div>
       <div v-if="deckStore.activeSlide" class="flex items-center gap-2">
@@ -58,15 +58,6 @@ const renderLabel = computed(() => {
             class="slide-rendered-image"
           />
         </div>
-
-        <el-alert
-          v-else-if="deckStore.activeSlide.render_status === 'unavailable'"
-          type="warning"
-          :closable="false"
-          show-icon
-          title="当前显示解析预览。"
-          description="真实 PPT 快照会由后端渲染服务生成；服务可用后可点击重渲染刷新。"
-        />
 
         <div v-if="!deckStore.activeSlide.snapshot_url" class="slide-stage">
           <div class="slide-sheet">

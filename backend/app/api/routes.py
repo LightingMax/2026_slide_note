@@ -2,10 +2,12 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 
 from app.core.config import get_settings
 from app.models.deck import ChatRequest, ChatResponse, Deck, NoteUpdate
 from app.services.ark_client import generate_note
+from app.services.ppt_exporter import export_deck_with_notes, find_uploaded_pptx
 from app.services.ppt_parser import parse_pptx
 from app.services.ppt_renderer import render_deck_snapshots
 from app.services.storage import list_decks, load_deck, save_deck
@@ -63,6 +65,41 @@ def update_notes(deck_id: str, slide_id: str, payload: NoteUpdate) -> Deck:
     raise HTTPException(status_code=404, detail="Slide not found")
 
 
+@router.post("/decks/{deck_id}/slides/{slide_id}/notes/reset", response_model=Deck)
+def reset_notes(deck_id: str, slide_id: str) -> Deck:
+    try:
+        deck = load_deck(deck_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Deck not found") from exc
+
+    for slide in deck.slides:
+        if slide.id == slide_id:
+            slide.notes = slide.original_notes or ""
+            save_deck(deck)
+            return deck
+    raise HTTPException(status_code=404, detail="Slide not found")
+
+
+@router.get("/decks/{deck_id}/export")
+def export_deck(deck_id: str) -> FileResponse:
+    try:
+        deck = load_deck(deck_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Deck not found") from exc
+
+    pptx_path = find_uploaded_pptx(deck_id)
+    if pptx_path is None:
+        raise HTTPException(status_code=404, detail="Original PPTX file not found")
+
+    exported = export_deck_with_notes(deck, pptx_path)
+    filename = f"{Path(deck.filename).stem}_slide-note.pptx"
+    return FileResponse(
+        exported,
+        media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        filename=filename,
+    )
+
+
 @router.post("/decks/{deck_id}/render", response_model=Deck)
 def render_deck(deck_id: str) -> Deck:
     try:
@@ -70,7 +107,7 @@ def render_deck(deck_id: str) -> Deck:
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Deck not found") from exc
 
-    pptx_path = _find_uploaded_pptx(deck_id)
+    pptx_path = find_uploaded_pptx(deck_id)
     if pptx_path is None:
         raise HTTPException(status_code=404, detail="Original PPTX file not found")
 
@@ -95,9 +132,3 @@ def chat(deck_id: str, payload: ChatRequest) -> ChatResponse:
     except RuntimeError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     return response
-
-
-def _find_uploaded_pptx(deck_id: str) -> Path | None:
-    for candidate in get_settings().upload_dir.glob(f"{deck_id}_*.pptx"):
-        return candidate
-    return None

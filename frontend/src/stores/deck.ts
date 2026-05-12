@@ -1,7 +1,15 @@
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 
-import { fetchDecks, renderDeck, requestNoteDraft, updateSlideNotes, uploadDeck } from '@/api/decks'
+import {
+  exportDeck,
+  fetchDecks,
+  renderDeck,
+  requestNoteDraft,
+  resetSlideNotes,
+  updateSlideNotes,
+  uploadDeck
+} from '@/api/decks'
 import type { ActivityItem, AgentResponse, ChatMessage, Deck, Slide } from '@/types/deck'
 
 const chatStorageKey = 'slide-note-chat-history'
@@ -77,7 +85,28 @@ export const useDeckStore = defineStore('deck', () => {
   async function saveNotes(notes: string) {
     if (!activeDeck.value || !activeSlideId.value) return
     activeDeck.value = await updateSlideNotes(activeDeck.value.id, activeSlideId.value, notes)
+    syncActiveDeck()
     addActivity('保存备注', `${activeSlide.value?.title || '当前页'}，${notes.length} 字`)
+  }
+
+  async function resetActiveSlideNotes() {
+    if (!activeDeck.value || !activeSlideId.value) return
+    activeDeck.value = await resetSlideNotes(activeDeck.value.id, activeSlideId.value)
+    syncActiveDeck()
+    addActivity('重置当前页讲稿', `${activeSlide.value?.title || '当前页'} 已还原为 PPT 原始备注`)
+  }
+
+  async function exportActiveDeck() {
+    if (!activeDeck.value) return
+    const blob = await exportDeck(activeDeck.value.id)
+    const name = activeDeck.value.filename.replace(/\.pptx$/i, '') || 'slide-note'
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `${name}_slide-note.pptx`
+    anchor.click()
+    URL.revokeObjectURL(url)
+    addActivity('导出 PPT', '已复制原始 PPT，并写入当前备注生成新文件')
   }
 
   async function rerenderSnapshots() {
@@ -85,7 +114,7 @@ export const useDeckStore = defineStore('deck', () => {
     loading.value = true
     try {
       activeDeck.value = await renderDeck(activeDeck.value.id)
-      decks.value = decks.value.map((deck) => (deck.id === activeDeck.value?.id ? activeDeck.value : deck))
+      syncActiveDeck()
       const status = activeDeck.value.slides.some((slide) => slide.render_status === 'ready')
         ? '已生成真实 PPT 快照'
         : '渲染服务暂不可用，已切换解析预览'
@@ -98,6 +127,8 @@ export const useDeckStore = defineStore('deck', () => {
   async function askAssistant(instruction: string): Promise<AgentResponse | null> {
     if (!activeDeck.value || !activeSlideId.value) return null
     chatMessages.value.push({ role: 'user', content: instruction })
+    chatMessages.value.push({ role: 'agent', content: '正在读取当前页内容、原始备注和对话上下文。' })
+    chatMessages.value.push({ role: 'agent', content: '正在生成可执行动作，准备更新当前页讲稿。' })
     addActivity('发送生成要求', instruction)
     try {
       const response = await requestNoteDraft(
@@ -111,6 +142,7 @@ export const useDeckStore = defineStore('deck', () => {
         content: response.message,
         actions: response.actions
       })
+      chatMessages.value.push({ role: 'agent', content: `已收到 ${response.actions.length} 个可执行动作。` })
       addActivity('生成备注草稿', `${activeSlide.value?.title || '当前页'}，${response.text.length} 字`)
       return response
     } catch (error) {
@@ -131,6 +163,14 @@ export const useDeckStore = defineStore('deck', () => {
     activityLog.value = activityLog.value.slice(0, 80)
   }
 
+  function addAgentMessage(content: string) {
+    chatMessages.value.push({ role: 'agent', content })
+  }
+
+  function syncActiveDeck() {
+    decks.value = decks.value.map((deck) => (deck.id === activeDeck.value?.id ? activeDeck.value : deck))
+  }
+
   return {
     decks,
     activeDeck,
@@ -143,9 +183,12 @@ export const useDeckStore = defineStore('deck', () => {
     setDeck,
     upload,
     saveNotes,
+    resetActiveSlideNotes,
+    exportActiveDeck,
     askAssistant,
     rerenderSnapshots,
-    addActivity
+    addActivity,
+    addAgentMessage
   }
 })
 

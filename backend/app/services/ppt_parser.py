@@ -57,6 +57,7 @@ def parse_pptx(source_path: Path, original_filename: str) -> Deck:
                 title=title,
                 text=text,
                 notes=notes,
+                original_notes=notes,
                 assets=_extract_slide_media(slide, deck_id, deck_media_dir),
             )
         )

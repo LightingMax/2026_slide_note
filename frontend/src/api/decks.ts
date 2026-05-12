@@ -18,6 +18,16 @@ export async function updateSlideNotes(deckId: string, slideId: string, notes: s
   return data
 }
 
+export async function resetSlideNotes(deckId: string, slideId: string) {
+  const { data } = await http.post<Deck>(`/decks/${deckId}/slides/${slideId}/notes/reset`)
+  return data
+}
+
+export async function exportDeck(deckId: string) {
+  const response = await http.get<Blob>(`/decks/${deckId}/export`, { responseType: 'blob' })
+  return response.data
+}
+
 export async function renderDeck(deckId: string) {
   const { data } = await http.post<Deck>(`/decks/${deckId}/render`)
   return data
@@ -32,7 +42,7 @@ export async function requestNoteDraft(
   const { data } = await http.post<AgentResponse>(`/decks/${deckId}/chat`, {
     slide_id: slideId,
     instruction,
-    messages
+    messages: messages.filter((message) => message.role === 'user' || message.role === 'assistant')
   })
   return data
 }

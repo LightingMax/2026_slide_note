@@ -68,11 +68,13 @@ async function send() {
                 :class="
                   message.role === 'assistant'
                     ? 'border-slate-200 bg-white text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100'
-                    : 'border-sky-200 bg-sky-50 text-slate-900 dark:border-sky-700 dark:bg-sky-950 dark:text-slate-50'
+                    : message.role === 'agent'
+                      ? 'border-dashed border-slate-300 bg-slate-50 text-slate-600 shadow-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                      : 'border-sky-200 bg-sky-50 text-slate-900 dark:border-sky-700 dark:bg-sky-950 dark:text-slate-50'
                 "
               >
                 <div class="mb-1 text-xs font-medium text-slate-500">
-                  {{ message.role === 'assistant' ? 'Slide Note' : '你' }}
+                  {{ message.role === 'assistant' ? 'Slide Note' : message.role === 'agent' ? '工作过程' : '你' }}
                 </div>
                 <p class="whitespace-pre-line">{{ message.content }}</p>
                 <div v-if="message.actions?.length" class="mt-3 space-y-2">
@@ -103,11 +105,21 @@ async function send() {
         <template #label>
           <span class="inline-flex items-center gap-1">
             <el-icon><Notebook /></el-icon>
-            记录
+            会话
           </span>
         </template>
         <el-scrollbar class="assistant-scroll">
           <div class="space-y-3 p-4">
+            <button
+              v-for="deck in deckStore.decks"
+              :key="deck.id"
+              class="block w-full rounded-md border border-slate-200 bg-white p-3 text-left text-sm shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800"
+              :class="deck.id === deckStore.activeDeck?.id ? 'border-sky-300 bg-sky-50 dark:border-sky-700 dark:bg-sky-950' : ''"
+              @click="deckStore.setDeck(deck)"
+            >
+              <div class="font-medium text-slate-900 dark:text-slate-100">{{ deck.filename }}</div>
+              <div class="mt-1 text-xs text-slate-500">{{ deck.slides.length }} 页 · 当前工作会话</div>
+            </button>
             <article
               v-for="item in deckStore.activityLog"
               :key="item.id"

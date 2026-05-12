@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class SlideAsset(BaseModel):
@@ -14,10 +14,17 @@ class Slide(BaseModel):
     title: str
     text: str
     notes: str
+    original_notes: str | None = None
     snapshot_url: str | None = None
     render_status: str = "pending"
     render_error: str | None = None
     assets: list[SlideAsset] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def hydrate_original_notes(self) -> "Slide":
+        if self.original_notes is None:
+            self.original_notes = self.notes
+        return self
 
 
 class Deck(BaseModel):

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { DocumentChecked } from '@element-plus/icons-vue'
+import { Download, DocumentChecked, RefreshLeft } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { ref, watch } from 'vue'
 
@@ -29,6 +29,30 @@ async function save() {
   }
 }
 
+async function reset() {
+  saving.value = true
+  try {
+    await deckStore.resetActiveSlideNotes()
+    ElMessage.success('已还原为 PPT 原始备注')
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '重置失败')
+  } finally {
+    saving.value = false
+  }
+}
+
+async function exportPpt() {
+  saving.value = true
+  try {
+    await deckStore.exportActiveDeck()
+    ElMessage.success('PPT 已导出')
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '导出失败')
+  } finally {
+    saving.value = false
+  }
+}
+
 function replaceText(value: string) {
   notes.value = value
 }
@@ -41,9 +65,13 @@ defineExpose({ replaceText })
     <div class="flex items-center justify-between border-b border-line px-5 py-3 dark:border-slate-700">
       <div class="flex items-center gap-2 text-sm font-medium">
         <el-icon><DocumentChecked /></el-icon>
-        <span>语音备注</span>
+        <span>当前页讲稿</span>
       </div>
-      <el-button size="small" type="primary" :loading="saving" @click="save">保存</el-button>
+      <div class="flex items-center gap-2">
+        <el-button size="small" :icon="RefreshLeft" :loading="saving" @click="reset">重置</el-button>
+        <el-button size="small" :icon="Download" :loading="saving" @click="exportPpt">导出 PPT</el-button>
+        <el-button size="small" type="primary" :loading="saving" @click="save">保存当前讲稿</el-button>
+      </div>
     </div>
     <el-input
       v-model="notes"

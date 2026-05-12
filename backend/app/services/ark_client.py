@@ -30,7 +30,12 @@ def generate_note(slide: Slide, instruction: str, history: list[dict[str, str]])
             "content": "你是可执行 agent，只返回 JSON。支持的 action 只有 replace_notes。",
         }
     ]
-    messages.extend(history[-8:])
+    safe_history = [
+        {"role": item["role"], "content": item["content"]}
+        for item in history[-8:]
+        if item.get("role") in {"user", "assistant"} and item.get("content")
+    ]
+    messages.extend(safe_history)
     messages.append({"role": "user", "content": prompt})
 
     try:

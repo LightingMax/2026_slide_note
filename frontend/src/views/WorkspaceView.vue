@@ -18,8 +18,10 @@ onMounted(() => {
 
 async function applyAssistantAction(action: AgentAction) {
   if (action.type !== 'replace_notes' || action.slide_id !== deckStore.activeSlideId) return
+  deckStore.addAgentMessage(`正在执行动作：${action.label}`)
   notesEditor.value?.replaceText(action.content)
   await deckStore.saveNotes(action.content)
+  deckStore.addAgentMessage('动作完成：当前页讲稿已更新并保存。')
   deckStore.addActivity('执行助手动作', `${action.label}，已写入当前页备注`)
 }
 </script>

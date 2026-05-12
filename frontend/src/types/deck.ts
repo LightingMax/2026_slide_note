@@ -11,6 +11,7 @@ export interface Slide {
   title: string
   text: string
   notes: string
+  original_notes?: string | null
   snapshot_url?: string | null
   render_status: 'pending' | 'ready' | 'missing' | 'unavailable'
   render_error?: string | null
@@ -25,7 +26,7 @@ export interface Deck {
 }
 
 export interface ChatMessage {
-  role: 'user' | 'assistant'
+  role: 'user' | 'assistant' | 'agent'
   content: string
   actions?: AgentAction[]
 }
