@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted } from 'vue'
 
 import AppHeader from '@/components/AppHeader.vue'
 import AssistantChat from '@/components/AssistantChat.vue'
@@ -7,23 +7,12 @@ import NotesEditor from '@/components/NotesEditor.vue'
 import SlideCanvas from '@/components/SlideCanvas.vue'
 import SlideNavigator from '@/components/SlideNavigator.vue'
 import { useDeckStore } from '@/stores/deck'
-import type { AgentAction } from '@/types/deck'
 
 const deckStore = useDeckStore()
-const notesEditor = ref<InstanceType<typeof NotesEditor> | null>(null)
 
 onMounted(() => {
   deckStore.loadDecks()
 })
-
-async function applyAssistantAction(action: AgentAction) {
-  if (action.type !== 'replace_notes' || action.slide_id !== deckStore.activeSlideId) return
-  deckStore.addAgentMessage(`正在执行动作：${action.label}`)
-  notesEditor.value?.replaceText(action.content)
-  await deckStore.saveNotes(action.content)
-  deckStore.addAgentMessage('动作完成：当前页讲稿已更新并保存。')
-  deckStore.addActivity('执行助手动作', `${action.label}，已写入当前页备注`)
-}
 </script>
 
 <template>
@@ -33,9 +22,9 @@ async function applyAssistantAction(action: AgentAction) {
       <SlideNavigator />
       <div class="flex min-h-0 flex-col gap-4">
         <SlideCanvas />
-        <NotesEditor ref="notesEditor" />
+        <NotesEditor />
       </div>
-      <AssistantChat @apply="applyAssistantAction" />
+      <AssistantChat />
     </div>
   </div>
 </template>

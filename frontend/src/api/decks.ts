@@ -1,5 +1,5 @@
 import { http } from './http'
-import type { AgentResponse, ChatMessage, Deck } from '@/types/deck'
+import type { AgentRunCreated, AgentStylePreset, ChatMessage, Deck } from '@/types/deck'
 
 export async function fetchDecks() {
   const { data } = await http.get<Deck[]>('/decks')
@@ -33,15 +33,23 @@ export async function renderDeck(deckId: string) {
   return data
 }
 
-export async function requestNoteDraft(
+export async function fetchAgentStyles() {
+  const { data } = await http.get<AgentStylePreset[]>('/agent/styles')
+  return data
+}
+
+export async function createAgentRun(
   deckId: string,
   slideId: string,
   instruction: string,
-  messages: ChatMessage[]
+  messages: ChatMessage[],
+  stylePreset: string
 ) {
-  const { data } = await http.post<AgentResponse>(`/decks/${deckId}/chat`, {
+  const { data } = await http.post<AgentRunCreated>('/agent/runs', {
+    deck_id: deckId,
     slide_id: slideId,
     instruction,
+    style_preset: stylePreset,
     messages: messages.filter((message) => message.role === 'user' || message.role === 'assistant')
   })
   return data

@@ -4,13 +4,8 @@ import { ElMessage } from 'element-plus'
 import { ref } from 'vue'
 
 import { useDeckStore } from '@/stores/deck'
-import type { AgentAction } from '@/types/deck'
 
 const deckStore = useDeckStore()
-const emit = defineEmits<{
-  apply: [action: AgentAction]
-}>()
-
 const instruction = ref('')
 const loading = ref(false)
 const activeTab = ref('chat')
@@ -20,13 +15,8 @@ async function send() {
   if (!value) return
   loading.value = true
   try {
-    const response = await deckStore.askAssistant(value)
+    await deckStore.askAssistant(value)
     instruction.value = ''
-    response?.actions.forEach((action) => {
-      if (action.type === 'replace_notes') {
-        emit('apply', action)
-      }
-    })
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '生成失败')
   } finally {
@@ -140,6 +130,20 @@ async function send() {
     </el-tabs>
 
     <div class="border-t border-line p-3 dark:border-slate-700">
+      <el-select
+        :model-value="deckStore.activeStylePreset"
+        class="mb-3 w-full"
+        size="small"
+        placeholder="选择讲稿风格"
+        @change="(value: string) => deckStore.setStylePreset(value)"
+      >
+        <el-option
+          v-for="style in deckStore.agentStyles"
+          :key="style.id"
+          :label="style.name"
+          :value="style.id"
+        />
+      </el-select>
       <el-input
         v-model="instruction"
         type="textarea"

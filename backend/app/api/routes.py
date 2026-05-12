@@ -2,10 +2,19 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 from app.core.config import get_settings
-from app.models.deck import ChatRequest, ChatResponse, Deck, NoteUpdate
+from app.models.deck import (
+    AgentRunCreate,
+    AgentRunCreated,
+    AgentStylePreset,
+    ChatRequest,
+    ChatResponse,
+    Deck,
+    NoteUpdate,
+)
+from app.services.agent_runner import create_run, list_style_presets, stream_run
 from app.services.ark_client import generate_note
 from app.services.ppt_exporter import export_deck_with_notes, find_uploaded_pptx
 from app.services.ppt_parser import parse_pptx
@@ -18,6 +27,21 @@ router = APIRouter(prefix="/api")
 @router.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@router.get("/agent/styles", response_model=list[AgentStylePreset])
+def get_agent_styles() -> list[AgentStylePreset]:
+    return list_style_presets()
+
+
+@router.post("/agent/runs", response_model=AgentRunCreated)
+def create_agent_run(payload: AgentRunCreate) -> AgentRunCreated:
+    return AgentRunCreated(run_id=create_run(payload))
+
+
+@router.get("/agent/runs/{run_id}/events")
+def get_agent_run_events(run_id: str) -> StreamingResponse:
+    return StreamingResponse(stream_run(run_id), media_type="text/event-stream")
 
 
 @router.get("/decks", response_model=list[Deck])

@@ -60,3 +60,21 @@ class ChatResponse(BaseModel):
     text: str
     message: str
     actions: list[AgentAction] = Field(default_factory=list)
+
+
+class AgentRunCreate(BaseModel):
+    deck_id: str
+    slide_id: str
+    instruction: str
+    style_preset: str = "narration"
+    messages: list[ChatMessage] = Field(default_factory=list)
+
+
+class AgentRunCreated(BaseModel):
+    run_id: str
+
+
+class AgentStylePreset(BaseModel):
+    id: str
+    name: str
+    description: str

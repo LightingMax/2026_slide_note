@@ -44,6 +44,16 @@ export interface AgentResponse {
   actions: AgentAction[]
 }
 
+export interface AgentStylePreset {
+  id: string
+  name: string
+  description: string
+}
+
+export interface AgentRunCreated {
+  run_id: string
+}
+
 export interface ActivityItem {
   id: string
   time: string

@@ -7,7 +7,12 @@ from app.core.config import get_settings
 from app.models.deck import AgentAction, ChatResponse, Slide
 
 
-def generate_note(slide: Slide, instruction: str, history: list[dict[str, str]]) -> ChatResponse:
+def generate_note(
+    slide: Slide,
+    instruction: str,
+    history: list[dict[str, str]],
+    style_instruction: str = "",
+) -> ChatResponse:
     settings = get_settings()
     if not settings.ark_api_key:
         raise RuntimeError("ARK_API_KEY is not configured")
@@ -19,6 +24,7 @@ def generate_note(slide: Slide, instruction: str, history: list[dict[str, str]])
         '{"message":"给用户看的简短说明","actions":[{"type":"replace_notes","slide_id":"'
         f'{slide.id}","label":"替换当前页备注","content":"可直接放入备注区的中文播报稿"}}]}}。'
         "content 要适合语音播报：自然、清晰、短句、不要使用项目符号堆砌。"
+        f"\n\n风格要求：\n{style_instruction or '自然口语化讲稿风格'}"
         "\n\n幻灯片标题："
         f"{slide.title}\n\n幻灯片文字：\n{slide.text or '无'}\n\n当前备注：\n{slide.notes or '无'}"
         f"\n\n用户要求：{instruction}"
