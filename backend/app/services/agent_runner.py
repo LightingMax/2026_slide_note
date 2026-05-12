@@ -1,4 +1,5 @@
 import json
+import re
 import uuid
 from collections.abc import Generator
 
@@ -59,42 +60,53 @@ def stream_run(run_id: str) -> Generator[str, None, None]:
         deck = load_deck(payload.deck_id)
         yield _event("progress", {"message": "正在读取演示文稿、当前页内容和原始备注。"})
 
-        slide = next((item for item in deck.slides if item.id == payload.slide_id), None)
-        if slide is None:
+        deck_scope = _is_deck_scope(payload.instruction)
+        target_slides = _resolve_target_slides(deck.slides, payload.slide_id, deck_scope)
+        if not target_slides:
             yield _event("error", {"message": "Slide not found"})
             return
+        scope_label = "整份演示文稿" if deck_scope else f"第 {target_slides[0].index} 页"
+        yield _event("progress", {"message": f"已识别任务范围：{scope_label}。"})
 
-        preset = STYLE_PRESETS.get(payload.style_preset, STYLE_PRESETS["narration"])
+        preset = _resolve_style_preset(payload.style_preset, payload.instruction)
         yield _event("progress", {"message": f"已应用风格：{preset.name}。"})
-        yield _event("progress", {"message": "正在调用模型生成可执行动作。"})
-
-        response = generate_note(
-            slide,
-            payload.instruction,
-            [item.model_dump() for item in payload.messages],
-            preset.description,
-        )
-        yield _event("assistant", response.model_dump())
 
         changed = False
-        for action in response.actions:
-            yield _event("progress", {"message": f"正在执行动作：{action.label}。"})
-            if action.type == "replace_notes" and action.slide_id == slide.id:
-                slide.notes = action.content
-                changed = True
+        for position, slide in enumerate(target_slides, start=1):
+            if len(target_slides) > 1:
                 yield _event(
-                    "action",
-                    {
-                        "type": action.type,
-                        "slide_id": action.slide_id,
-                        "label": action.label,
-                        "content": action.content,
-                    },
+                    "progress",
+                    {"message": f"正在处理第 {slide.index} 页（{position}/{len(target_slides)}）。"},
                 )
+            yield _event("progress", {"message": "正在调用模型生成可执行动作。"})
+
+            response = generate_note(
+                slide,
+                _scoped_instruction(payload.instruction, len(target_slides)),
+                [item.model_dump() for item in payload.messages],
+                preset.description,
+            )
+            yield _event("assistant", response.model_dump())
+
+            for action in response.actions:
+                yield _event("progress", {"message": f"正在执行动作：{action.label}。"})
+                if action.type == "replace_notes" and action.slide_id == slide.id:
+                    slide.notes = action.content
+                    changed = True
+                    yield _event(
+                        "action",
+                        {
+                            "type": action.type,
+                            "slide_id": action.slide_id,
+                            "label": action.label,
+                            "content": action.content,
+                        },
+                    )
 
         if changed:
             save_deck(deck)
-            yield _event("progress", {"message": "当前页讲稿已写入并保存。"})
+            done_message = "所有目标页讲稿已写入并保存。" if len(target_slides) > 1 else "当前页讲稿已写入并保存。"
+            yield _event("progress", {"message": done_message})
 
         yield _event("done", {"deck": deck.model_dump()})
     except RuntimeError as exc:
@@ -107,3 +119,46 @@ def _event(name: str, payload: dict) -> str:
     data = json.dumps(payload, ensure_ascii=False)
     return f"event: {name}\ndata: {data}\n\n"
 
+
+def _resolve_target_slides(slides, slide_id: str, deck_scope: bool):
+    if deck_scope:
+        return slides
+    return [item for item in slides if item.id == slide_id]
+
+
+def _is_deck_scope(instruction: str) -> bool:
+    text = instruction.lower()
+    patterns = [
+        r"所有\s*(幻灯片|页面|页)",
+        r"全部\s*(幻灯片|页面|页)",
+        r"整份\s*(ppt|演示文稿|幻灯片|文档)",
+        r"全\s*(ppt|演示文稿|幻灯片)",
+        r"每一页",
+        r"每页",
+        r"all\s+slides",
+        r"every\s+slide",
+        r"whole\s+(deck|ppt|presentation)",
+    ]
+    return any(re.search(pattern, text) for pattern in patterns)
+
+
+def _resolve_style_preset(style_preset: str, instruction: str) -> AgentStylePreset:
+    text = instruction.lower()
+    if re.search(r"小朋友|儿童|孩子|children|kid", text):
+        return STYLE_PRESETS["children"]
+    if re.search(r"商务|商业|路演|business", text):
+        return STYLE_PRESETS["business"]
+    if re.search(r"高管|老板|executive|brief", text):
+        return STYLE_PRESETS["executive"]
+    if re.search(r"销售|产品演示|demo|sales", text):
+        return STYLE_PRESETS["sales"]
+    return STYLE_PRESETS.get(style_preset, STYLE_PRESETS["narration"])
+
+
+def _scoped_instruction(instruction: str, target_count: int) -> str:
+    if target_count <= 1:
+        return instruction
+    return (
+        f"{instruction}\n\n这是一个整份 PPT 的批量任务。"
+        "请只为当前这一页生成讲稿，保持所选风格一致，不要提到其他页的处理进度。"
+    )
