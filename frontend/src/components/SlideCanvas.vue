@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Files, Picture, Refresh, VideoCameraFilled } from '@element-plus/icons-vue'
+import { Files, Picture, VideoCameraFilled } from '@element-plus/icons-vue'
 import { computed } from 'vue'
 
 import { useDeckStore } from '@/stores/deck'
@@ -38,14 +38,6 @@ const renderLabel = computed(() => {
           {{ renderLabel }}
         </el-tag>
         <el-tag>第 {{ deckStore.activeSlide.index }} 页</el-tag>
-        <el-button
-          size="small"
-          :icon="Refresh"
-          :loading="deckStore.loading"
-          @click="deckStore.rerenderSnapshots"
-        >
-          重渲染
-        </el-button>
       </div>
     </div>
 

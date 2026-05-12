@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Download, DocumentChecked, RefreshLeft } from '@element-plus/icons-vue'
+import { DocumentChecked, RefreshLeft } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { ref, watch } from 'vue'
 
@@ -41,18 +41,6 @@ async function reset() {
   }
 }
 
-async function exportPpt() {
-  saving.value = true
-  try {
-    await deckStore.exportActiveDeck()
-    ElMessage.success('PPT 已导出')
-  } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '导出失败')
-  } finally {
-    saving.value = false
-  }
-}
-
 function replaceText(value: string) {
   notes.value = value
 }
@@ -69,7 +57,6 @@ defineExpose({ replaceText })
       </div>
       <div class="flex items-center gap-2">
         <el-button size="small" :icon="RefreshLeft" :loading="saving" @click="reset">重置</el-button>
-        <el-button size="small" :icon="Download" :loading="saving" @click="exportPpt">导出 PPT</el-button>
         <el-button size="small" type="primary" :loading="saving" @click="save">保存当前讲稿</el-button>
       </div>
     </div>

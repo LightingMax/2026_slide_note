@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ChatLineRound, Clock, EditPen, Notebook } from '@element-plus/icons-vue'
+import { ChatLineRound, Clock, Notebook, Promotion } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { ref } from 'vue'
 
@@ -11,7 +11,7 @@ const emit = defineEmits<{
   apply: [action: AgentAction]
 }>()
 
-const instruction = ref('把这一页备注改写成 40 秒左右的自然中文播报稿')
+const instruction = ref('')
 const loading = ref(false)
 const activeTab = ref('chat')
 
@@ -40,11 +40,8 @@ async function send() {
     <div class="border-b border-line p-4 dark:border-slate-700">
       <div class="flex items-center gap-2 text-sm font-semibold">
         <el-icon><ChatLineRound /></el-icon>
-        <span>智能备注助手</span>
+        <span>会话</span>
       </div>
-      <p class="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">
-        保留你和助手的对话，以及我对这份 PPT 做过的操作记录。
-      </p>
     </div>
 
     <el-tabs v-model="activeTab" class="assistant-tabs min-h-0 flex-1">
@@ -147,15 +144,12 @@ async function send() {
         v-model="instruction"
         type="textarea"
         resize="none"
-        :rows="4"
-        placeholder="输入改写要求"
+        :rows="3"
+        placeholder="输入消息，回车发送，Shift+Enter 换行"
+        @keydown.enter.exact.prevent="send"
       />
-      <div class="mt-3 grid grid-cols-2 gap-2">
-        <el-button @click="instruction = '润色当前备注，使其更适合语音播报'">润色</el-button>
-        <el-button @click="instruction = '把现在的内容压缩成更短、更容易听懂的版本'">压缩</el-button>
-      </div>
-      <el-button class="mt-3 w-full" type="primary" :icon="EditPen" :loading="loading" @click="send">
-        生成并填入备注
+      <el-button class="mt-3 w-full" type="primary" :icon="Promotion" :loading="loading" @click="send">
+        发送
       </el-button>
     </div>
   </aside>

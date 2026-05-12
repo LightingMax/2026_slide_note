@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Moon, Sunny, UploadFilled } from '@element-plus/icons-vue'
+import { Download, Moon, Refresh, Sunny, UploadFilled } from '@element-plus/icons-vue'
 import { ElMessage, type UploadRequestOptions } from 'element-plus'
 
 import { useDeckStore } from '@/stores/deck'
@@ -14,6 +14,24 @@ async function handleUpload(options: UploadRequestOptions) {
     ElMessage.success('PPT 已解析完成')
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '上传失败')
+  }
+}
+
+async function renderSnapshots() {
+  try {
+    await deckStore.rerenderSnapshots()
+    ElMessage.success('快照任务已完成')
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '快照生成失败')
+  }
+}
+
+async function exportPpt() {
+  try {
+    await deckStore.exportActiveDeck()
+    ElMessage.success('PPT 已导出')
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '导出失败')
   }
 }
 </script>
@@ -32,6 +50,12 @@ async function handleUpload(options: UploadRequestOptions) {
         :inactive-action-icon="Sunny"
         @change="(value: string | number | boolean) => theme.toggle(Boolean(value))"
       />
+      <el-button :icon="Refresh" :loading="deckStore.loading" :disabled="!deckStore.activeDeck" @click="renderSnapshots">
+        生成快照
+      </el-button>
+      <el-button :icon="Download" :disabled="!deckStore.activeDeck" @click="exportPpt">
+        导出 PPT
+      </el-button>
       <el-upload
         accept=".pptx"
         :show-file-list="false"
