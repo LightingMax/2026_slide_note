@@ -4,10 +4,11 @@ import { ElMessage } from 'element-plus'
 import { ref } from 'vue'
 
 import { useDeckStore } from '@/stores/deck'
+import type { AgentAction } from '@/types/deck'
 
 const deckStore = useDeckStore()
 const emit = defineEmits<{
-  apply: [value: string]
+  apply: [action: AgentAction]
 }>()
 
 const instruction = ref('把这一页备注改写成 40 秒左右的自然中文播报稿')
@@ -19,9 +20,13 @@ async function send() {
   if (!value) return
   loading.value = true
   try {
-    const text = await deckStore.askAssistant(value)
+    const response = await deckStore.askAssistant(value)
     instruction.value = ''
-    emit('apply', text)
+    response?.actions.forEach((action) => {
+      if (action.type === 'replace_notes') {
+        emit('apply', action)
+      }
+    })
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '生成失败')
   } finally {
@@ -70,6 +75,20 @@ async function send() {
                   {{ message.role === 'assistant' ? 'Slide Note' : '你' }}
                 </div>
                 <p class="whitespace-pre-line">{{ message.content }}</p>
+                <div v-if="message.actions?.length" class="mt-3 space-y-2">
+                  <div
+                    v-for="action in message.actions"
+                    :key="`${action.type}-${action.slide_id}-${action.label}`"
+                    class="rounded border border-slate-200 bg-slate-50 p-2 text-xs dark:border-slate-700 dark:bg-slate-800"
+                  >
+                    <div class="mb-1 font-medium text-slate-700 dark:text-slate-200">
+                      {{ action.label }}
+                    </div>
+                    <p class="line-clamp-3 leading-5 text-slate-500 dark:text-slate-400">
+                      {{ action.content }}
+                    </p>
+                  </div>
+                </div>
               </article>
             </div>
             <el-empty

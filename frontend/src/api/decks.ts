@@ -1,5 +1,5 @@
 import { http } from './http'
-import type { ChatMessage, Deck } from '@/types/deck'
+import type { AgentResponse, ChatMessage, Deck } from '@/types/deck'
 
 export async function fetchDecks() {
   const { data } = await http.get<Deck[]>('/decks')
@@ -29,10 +29,10 @@ export async function requestNoteDraft(
   instruction: string,
   messages: ChatMessage[]
 ) {
-  const { data } = await http.post<{ text: string }>(`/decks/${deckId}/chat`, {
+  const { data } = await http.post<AgentResponse>(`/decks/${deckId}/chat`, {
     slide_id: slideId,
     instruction,
     messages
   })
-  return data.text
+  return data
 }

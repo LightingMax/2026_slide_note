@@ -64,8 +64,8 @@ const renderLabel = computed(() => {
           type="warning"
           :closable="false"
           show-icon
-          title="PPT 渲染服务未启用，当前显示解析预览。"
-          :description="deckStore.activeSlide.render_error || '请在后端安装 LibreOffice，并可选配置 LIBREOFFICE_PATH。'"
+          title="当前显示解析预览。"
+          description="真实 PPT 快照会由后端渲染服务生成；服务可用后可点击重渲染刷新。"
         />
 
         <div v-if="!deckStore.activeSlide.snapshot_url" class="slide-stage">

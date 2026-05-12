@@ -91,10 +91,10 @@ def chat(deck_id: str, payload: ChatRequest) -> ChatResponse:
         raise HTTPException(status_code=404, detail="Slide not found")
 
     try:
-        text = generate_note(slide, payload.instruction, [item.model_dump() for item in payload.messages])
+        response = generate_note(slide, payload.instruction, [item.model_dump() for item in payload.messages])
     except RuntimeError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
-    return ChatResponse(text=text)
+    return response
 
 
 def _find_uploaded_pptx(deck_id: str) -> Path | None:

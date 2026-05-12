@@ -27,6 +27,20 @@ export interface Deck {
 export interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
+  actions?: AgentAction[]
+}
+
+export interface AgentAction {
+  type: 'replace_notes'
+  slide_id: string
+  label: string
+  content: string
+}
+
+export interface AgentResponse {
+  text: string
+  message: string
+  actions: AgentAction[]
 }
 
 export interface ActivityItem {

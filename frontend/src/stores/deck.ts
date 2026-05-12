@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 
 import { fetchDecks, renderDeck, requestNoteDraft, updateSlideNotes, uploadDeck } from '@/api/decks'
-import type { ActivityItem, ChatMessage, Deck, Slide } from '@/types/deck'
+import type { ActivityItem, AgentResponse, ChatMessage, Deck, Slide } from '@/types/deck'
 
 const chatStorageKey = 'slide-note-chat-history'
 const activityStorageKey = 'slide-note-activity-log'
@@ -88,27 +88,31 @@ export const useDeckStore = defineStore('deck', () => {
       decks.value = decks.value.map((deck) => (deck.id === activeDeck.value?.id ? activeDeck.value : deck))
       const status = activeDeck.value.slides.some((slide) => slide.render_status === 'ready')
         ? '已生成真实 PPT 快照'
-        : activeDeck.value.slides[0]?.render_error || '渲染服务不可用'
+        : '渲染服务暂不可用，已切换解析预览'
       addActivity('重新渲染快照', status)
     } finally {
       loading.value = false
     }
   }
 
-  async function askAssistant(instruction: string) {
-    if (!activeDeck.value || !activeSlideId.value) return ''
+  async function askAssistant(instruction: string): Promise<AgentResponse | null> {
+    if (!activeDeck.value || !activeSlideId.value) return null
     chatMessages.value.push({ role: 'user', content: instruction })
     addActivity('发送生成要求', instruction)
     try {
-      const text = await requestNoteDraft(
+      const response = await requestNoteDraft(
         activeDeck.value.id,
         activeSlideId.value,
         instruction,
         chatMessages.value
       )
-      chatMessages.value.push({ role: 'assistant', content: text })
-      addActivity('生成备注草稿', `${activeSlide.value?.title || '当前页'}，${text.length} 字`)
-      return text
+      chatMessages.value.push({
+        role: 'assistant',
+        content: response.message,
+        actions: response.actions
+      })
+      addActivity('生成备注草稿', `${activeSlide.value?.title || '当前页'}，${response.text.length} 字`)
+      return response
     } catch (error) {
       const message = error instanceof Error ? error.message : '生成失败'
       chatMessages.value.push({ role: 'assistant', content: `请求失败：${message}` })

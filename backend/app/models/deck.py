@@ -36,6 +36,13 @@ class ChatMessage(BaseModel):
     content: str
 
 
+class AgentAction(BaseModel):
+    type: str
+    slide_id: str
+    label: str
+    content: str
+
+
 class ChatRequest(BaseModel):
     slide_id: str
     instruction: str
@@ -44,3 +51,5 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     text: str
+    message: str
+    actions: list[AgentAction] = Field(default_factory=list)
