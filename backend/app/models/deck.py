@@ -66,7 +66,7 @@ class AgentRunCreate(BaseModel):
     deck_id: str
     slide_id: str
     instruction: str
-    style_preset: str = "narration"
+    style_preset: str = "auto"
     messages: list[ChatMessage] = Field(default_factory=list)
 
 

@@ -14,7 +14,7 @@ from app.models.deck import (
     Deck,
     NoteUpdate,
 )
-from app.services.agent_runner import create_run, list_style_presets, stream_run
+from app.services.agent_runner import cancel_run, create_run, list_style_presets, stream_run
 from app.services.ark_client import generate_note
 from app.services.ppt_exporter import export_deck_with_notes, find_uploaded_pptx
 from app.services.ppt_parser import parse_pptx
@@ -42,6 +42,11 @@ def create_agent_run(payload: AgentRunCreate) -> AgentRunCreated:
 @router.get("/agent/runs/{run_id}/events")
 def get_agent_run_events(run_id: str) -> StreamingResponse:
     return StreamingResponse(stream_run(run_id), media_type="text/event-stream")
+
+
+@router.delete("/agent/runs/{run_id}")
+def cancel_agent_run(run_id: str) -> dict[str, bool]:
+    return {"cancelled": cancel_run(run_id)}
 
 
 @router.get("/decks", response_model=list[Deck])

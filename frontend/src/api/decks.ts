@@ -54,3 +54,8 @@ export async function createAgentRun(
   })
   return data
 }
+
+export async function cancelAgentRun(runId: string) {
+  const { data } = await http.delete<{ cancelled: boolean }>(`/agent/runs/${runId}`)
+  return data
+}

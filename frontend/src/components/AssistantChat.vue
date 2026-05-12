@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ChatLineRound, Clock, Notebook, Promotion } from '@element-plus/icons-vue'
+import { ChatLineRound, Clock, Notebook, Promotion, VideoPause } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { ref } from 'vue'
 
@@ -19,6 +19,29 @@ async function send() {
     instruction.value = ''
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '生成失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+async function applyStyle(styleId: string) {
+  const style = deckStore.agentStyles.find((item) => item.id === styleId)
+  if (!style) return
+  loading.value = true
+  try {
+    await deckStore.applyStyleTemplate(style)
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '生成失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+async function stop() {
+  try {
+    await deckStore.stopAgentRun()
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '停止失败')
   } finally {
     loading.value = false
   }
@@ -82,8 +105,15 @@ async function send() {
             </div>
             <el-empty
               v-if="deckStore.chatMessages.length === 0"
-              description="这一页还没有对话记录"
-            />
+              description="当前讲稿已经准备好，你希望迁移成什么风格？"
+            >
+              <div class="grid grid-cols-2 gap-2">
+                <el-button @click="applyStyle('business')">商务汇报</el-button>
+                <el-button @click="applyStyle('children')">小朋友友好</el-button>
+                <el-button @click="applyStyle('executive')">高管简报</el-button>
+                <el-button @click="applyStyle('sales')">产品演示</el-button>
+              </div>
+            </el-empty>
           </div>
         </el-scrollbar>
       </el-tab-pane>
@@ -130,29 +160,25 @@ async function send() {
     </el-tabs>
 
     <div class="border-t border-line p-3 dark:border-slate-700">
-      <el-select
-        :model-value="deckStore.activeStylePreset"
-        class="mb-3 w-full"
-        size="small"
-        placeholder="选择讲稿风格"
-        @change="(value: string) => deckStore.setStylePreset(value)"
-      >
-        <el-option
-          v-for="style in deckStore.agentStyles"
-          :key="style.id"
-          :label="style.name"
-          :value="style.id"
-        />
-      </el-select>
       <el-input
         v-model="instruction"
         type="textarea"
         resize="none"
         :rows="3"
         placeholder="输入消息，回车发送，Shift+Enter 换行"
+        :disabled="deckStore.agentRunning"
         @keydown.enter.exact.prevent="send"
       />
-      <el-button class="mt-3 w-full" type="primary" :icon="Promotion" :loading="loading" @click="send">
+      <el-button
+        v-if="deckStore.agentRunning"
+        class="mt-3 w-full"
+        type="danger"
+        :icon="VideoPause"
+        @click="stop"
+      >
+        停止
+      </el-button>
+      <el-button v-else class="mt-3 w-full" type="primary" :icon="Promotion" :loading="loading" @click="send">
         发送
       </el-button>
     </div>

@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 
 import {
+  cancelAgentRun,
   createAgentRun,
   exportDeck,
   fetchAgentStyles,
@@ -15,7 +16,6 @@ import type { ActivityItem, AgentAction, AgentResponse, AgentStylePreset, ChatMe
 
 const chatStorageKey = 'slide-note-chat-history'
 const activityStorageKey = 'slide-note-activity-log'
-const styleStorageKey = 'slide-note-style-preset'
 
 type ChatHistory = Record<string, ChatMessage[]>
 
@@ -28,15 +28,17 @@ export const useDeckStore = defineStore('deck', () => {
   const chatHistory = ref<ChatHistory>(loadJson<ChatHistory>(chatStorageKey, {}))
   const activityLog = ref<ActivityItem[]>(loadJson<ActivityItem[]>(activityStorageKey, []))
   const agentStyles = ref<AgentStylePreset[]>([])
-  const activeStylePreset = ref(localStorage.getItem(styleStorageKey) || 'narration')
+  const agentRunning = ref(false)
+  const activeRunId = ref<string>('')
+  let activeEventSource: EventSource | null = null
 
   const activeSlide = computed<Slide | null>(() => {
     return activeDeck.value?.slides.find((slide) => slide.id === activeSlideId.value) ?? null
   })
 
   const activeChatKey = computed(() => {
-    if (!activeDeck.value || !activeSlideId.value) return ''
-    return `${activeDeck.value.id}:${activeSlideId.value}`
+    if (!activeDeck.value) return ''
+    return activeDeck.value.id
   })
 
   watch(activeChatKey, (key) => {
@@ -67,13 +69,6 @@ export const useDeckStore = defineStore('deck', () => {
     if (!activeDeck.value && decks.value.length > 0) {
       setDeck(decks.value[0])
     }
-  }
-
-  function setStylePreset(value: string) {
-    activeStylePreset.value = value
-    localStorage.setItem(styleStorageKey, value)
-    const preset = agentStyles.value.find((item) => item.id === value)
-    addActivity('切换讲稿风格', preset?.name || value)
   }
 
   function setDeck(deck: Deck) {
@@ -138,6 +133,7 @@ export const useDeckStore = defineStore('deck', () => {
 
   async function askAssistant(instruction: string): Promise<AgentResponse | null> {
     if (!activeDeck.value || !activeSlideId.value) return null
+    if (agentRunning.value) return null
     chatMessages.value.push({ role: 'user', content: instruction })
     addActivity('发送生成要求', instruction)
     const run = await createAgentRun(
@@ -145,9 +141,25 @@ export const useDeckStore = defineStore('deck', () => {
       activeSlideId.value,
       instruction,
       chatMessages.value,
-      activeStylePreset.value
+      'auto'
     )
+    activeRunId.value = run.run_id
     return streamAgentRun(run.run_id)
+  }
+
+  async function applyStyleTemplate(style: AgentStylePreset) {
+    const instruction = `请把当前页讲稿迁移成「${style.name}」风格。风格要求：${style.description}`
+    return askAssistant(instruction)
+  }
+
+  async function stopAgentRun() {
+    if (!activeRunId.value) return
+    await cancelAgentRun(activeRunId.value)
+    activeEventSource?.close()
+    activeEventSource = null
+    addAgentMessage('已请求停止当前任务。')
+    agentRunning.value = false
+    activeRunId.value = ''
   }
 
   function addActivity(title: string, detail: string) {
@@ -178,6 +190,8 @@ export const useDeckStore = defineStore('deck', () => {
   function streamAgentRun(runId: string) {
     return new Promise<AgentResponse | null>((resolve, reject) => {
       const source = new EventSource(`/api/agent/runs/${runId}/events`)
+      activeEventSource = source
+      agentRunning.value = true
       let response: AgentResponse | null = null
 
       source.addEventListener('progress', (event) => {
@@ -206,6 +220,19 @@ export const useDeckStore = defineStore('deck', () => {
         activeDeck.value = payload.deck
         syncActiveDeck()
         source.close()
+        activeEventSource = null
+        activeRunId.value = ''
+        agentRunning.value = false
+        resolve(response)
+      })
+
+      source.addEventListener('cancelled', (event) => {
+        const payload = JSON.parse((event as MessageEvent).data) as { message: string }
+        addAgentMessage(payload.message)
+        source.close()
+        activeEventSource = null
+        activeRunId.value = ''
+        agentRunning.value = false
         resolve(response)
       })
 
@@ -216,6 +243,9 @@ export const useDeckStore = defineStore('deck', () => {
         chatMessages.value.push({ role: 'assistant', content: `请求失败：${message}` })
         addActivity('生成失败', message)
         source.close()
+        activeEventSource = null
+        activeRunId.value = ''
+        agentRunning.value = false
         reject(new Error(message))
       })
     })
@@ -234,15 +264,16 @@ export const useDeckStore = defineStore('deck', () => {
     chatMessages,
     activityLog,
     agentStyles,
-    activeStylePreset,
+    agentRunning,
     loadDecks,
     setDeck,
-    setStylePreset,
     upload,
     saveNotes,
     resetActiveSlideNotes,
     exportActiveDeck,
     askAssistant,
+    applyStyleTemplate,
+    stopAgentRun,
     rerenderSnapshots,
     addActivity,
     addAgentMessage

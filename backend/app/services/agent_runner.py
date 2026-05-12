@@ -37,6 +37,7 @@ STYLE_PRESETS = {
 }
 
 _RUNS: dict[str, AgentRunCreate] = {}
+_CANCELLED_RUNS: set[str] = set()
 
 
 def list_style_presets() -> list[AgentStylePreset]:
@@ -47,6 +48,13 @@ def create_run(payload: AgentRunCreate) -> str:
     run_id = uuid.uuid4().hex
     _RUNS[run_id] = payload
     return run_id
+
+
+def cancel_run(run_id: str) -> bool:
+    if run_id not in _RUNS:
+        return False
+    _CANCELLED_RUNS.add(run_id)
+    return True
 
 
 def stream_run(run_id: str) -> Generator[str, None, None]:
@@ -60,6 +68,7 @@ def stream_run(run_id: str) -> Generator[str, None, None]:
         deck = load_deck(payload.deck_id)
         yield _event("progress", {"message": "正在读取演示文稿、当前页内容和原始备注。"})
 
+        context_text = _context_text(payload.instruction, payload.messages)
         deck_scope = _is_deck_scope(payload.instruction)
         target_slides = _resolve_target_slides(deck.slides, payload.slide_id, deck_scope)
         if not target_slides:
@@ -68,11 +77,14 @@ def stream_run(run_id: str) -> Generator[str, None, None]:
         scope_label = "整份演示文稿" if deck_scope else f"第 {target_slides[0].index} 页"
         yield _event("progress", {"message": f"已识别任务范围：{scope_label}。"})
 
-        preset = _resolve_style_preset(payload.style_preset, payload.instruction)
+        preset = _resolve_style_preset(payload.style_preset, payload.instruction, context_text)
         yield _event("progress", {"message": f"已应用风格：{preset.name}。"})
 
         changed = False
         for position, slide in enumerate(target_slides, start=1):
+            if _is_cancelled(run_id):
+                yield _event("cancelled", {"message": "任务已停止，未继续处理剩余页面。"})
+                return
             if len(target_slides) > 1:
                 yield _event(
                     "progress",
@@ -89,6 +101,9 @@ def stream_run(run_id: str) -> Generator[str, None, None]:
             yield _event("assistant", response.model_dump())
 
             for action in response.actions:
+                if _is_cancelled(run_id):
+                    yield _event("cancelled", {"message": "任务已停止。"})
+                    return
                 yield _event("progress", {"message": f"正在执行动作：{action.label}。"})
                 if action.type == "replace_notes" and action.slide_id == slide.id:
                     slide.notes = action.content
@@ -113,6 +128,7 @@ def stream_run(run_id: str) -> Generator[str, None, None]:
         yield _event("error", {"message": str(exc)})
     finally:
         _RUNS.pop(run_id, None)
+        _CANCELLED_RUNS.discard(run_id)
 
 
 def _event(name: str, payload: dict) -> str:
@@ -142,8 +158,20 @@ def _is_deck_scope(instruction: str) -> bool:
     return any(re.search(pattern, text) for pattern in patterns)
 
 
-def _resolve_style_preset(style_preset: str, instruction: str) -> AgentStylePreset:
-    text = instruction.lower()
+def _resolve_style_preset(style_preset: str, instruction: str, context_text: str) -> AgentStylePreset:
+    explicit = _style_from_text(instruction)
+    if explicit:
+        return explicit
+    contextual = _style_from_text(context_text)
+    if contextual:
+        return contextual
+    if style_preset != "auto":
+        return STYLE_PRESETS.get(style_preset, STYLE_PRESETS["narration"])
+    return STYLE_PRESETS["narration"]
+
+
+def _style_from_text(text: str) -> AgentStylePreset | None:
+    text = text.lower()
     if re.search(r"小朋友|儿童|孩子|children|kid", text):
         return STYLE_PRESETS["children"]
     if re.search(r"商务|商业|路演|business", text):
@@ -152,7 +180,9 @@ def _resolve_style_preset(style_preset: str, instruction: str) -> AgentStylePres
         return STYLE_PRESETS["executive"]
     if re.search(r"销售|产品演示|demo|sales", text):
         return STYLE_PRESETS["sales"]
-    return STYLE_PRESETS.get(style_preset, STYLE_PRESETS["narration"])
+    if re.search(r"自然|口语|播报|narration", text):
+        return STYLE_PRESETS["narration"]
+    return None
 
 
 def _scoped_instruction(instruction: str, target_count: int) -> str:
@@ -162,3 +192,17 @@ def _scoped_instruction(instruction: str, target_count: int) -> str:
         f"{instruction}\n\n这是一个整份 PPT 的批量任务。"
         "请只为当前这一页生成讲稿，保持所选风格一致，不要提到其他页的处理进度。"
     )
+
+
+def _context_text(instruction: str, messages) -> str:
+    recent = [
+        item.content
+        for item in messages[-12:]
+        if item.role in {"user", "assistant"} and item.content
+    ]
+    recent.append(instruction)
+    return "\n".join(reversed(recent))
+
+
+def _is_cancelled(run_id: str) -> bool:
+    return run_id in _CANCELLED_RUNS
