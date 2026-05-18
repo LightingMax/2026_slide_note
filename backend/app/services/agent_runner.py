@@ -76,8 +76,21 @@ def stream_run(run_id: str) -> Generator[str, None, None]:
         deck = load_deck(payload.deck_id)
         yield _event("progress", {"message": "正在读取演示文稿、当前页内容和原始备注。"})
 
-        deck_scope = _is_deck_scope(payload.instruction)
-        if _needs_scope_clarification(payload.instruction, deck_scope, len(deck.slides)):
+        instruction = _resolve_effective_instruction(payload.instruction, payload.messages)
+        if _needs_language_clarification(instruction):
+            yield _event(
+                "assistant",
+                {
+                    "text": "",
+                    "message": "我需要先确认讲稿语言：这次面向外宾，是要中文讲稿、英文讲稿，还是其他语言？你可以回复“中文”“英文”“日文”“泰文”等。",
+                    "actions": [],
+                },
+            )
+            yield _event("done", {"deck": deck.model_dump()})
+            return
+
+        deck_scope = _is_deck_scope(instruction)
+        if _needs_scope_clarification(instruction, deck_scope, len(deck.slides)):
             yield _event(
                 "assistant",
                 {
@@ -95,9 +108,9 @@ def stream_run(run_id: str) -> Generator[str, None, None]:
         scope_label = "整份演示文稿" if deck_scope else f"第 {target_slides[0].index} 页"
         yield _event("progress", {"message": f"已识别任务范围：{scope_label}。"})
 
-        preset = _resolve_style_preset(payload.style_preset, payload.instruction, payload.messages)
+        preset = _resolve_style_preset(payload.style_preset, instruction, payload.messages)
         yield _event("progress", {"message": f"已应用风格：{preset.name}。"})
-        record_user_intent(payload.deck_id, payload.instruction, scope_label, preset.name)
+        record_user_intent(payload.deck_id, instruction, scope_label, preset.name)
         yield _event("progress", {"message": "已写入本次用户意图到 PPT 记忆。"})
         narrative_plan = _build_narrative_plan(deck.slides, target_slides, preset, deck_scope)
         if len(target_slides) > 1:
@@ -117,7 +130,7 @@ def stream_run(run_id: str) -> Generator[str, None, None]:
 
             response = generate_note(
                 slide,
-                _scoped_instruction(payload.instruction, len(target_slides)),
+                _scoped_instruction(instruction, len(target_slides)),
                 [item.model_dump() for item in payload.messages],
                 preset.description,
                 _deck_context(
@@ -158,7 +171,7 @@ def stream_run(run_id: str) -> Generator[str, None, None]:
                 record_agent_note_change(
                     payload.deck_id,
                     slide,
-                    payload.instruction,
+                    instruction,
                     preset.name,
                     action.content,
                     action.slide_id,
@@ -217,6 +230,8 @@ def _is_deck_scope(instruction: str) -> bool:
 def _is_current_slide_scope(instruction: str) -> bool:
     text = instruction.lower()
     patterns = [
+        r"用户补充：\s*当前页",
+        r"用户补充：\s*当前页面",
         r"当前\s*(页|页面|幻灯片)",
         r"这一\s*(页|页面|张)",
         r"这\s*(页|张)",
@@ -224,6 +239,90 @@ def _is_current_slide_scope(instruction: str) -> bool:
         r"this\s+slide",
     ]
     return any(re.search(pattern, text) for pattern in patterns)
+
+
+def _resolve_effective_instruction(instruction: str, messages) -> str:
+    user_messages = [
+        item.content.strip()
+        for item in messages
+        if item.role == "user" and item.content and item.content.strip()
+    ]
+    if user_messages and user_messages[-1] == instruction.strip():
+        previous = user_messages[:-1]
+    else:
+        previous = user_messages
+
+    if not (_is_scope_answer(instruction) or _is_language_answer(instruction)):
+        return instruction
+
+    intent = _last_substantive_user_intent(previous)
+    if not intent:
+        return instruction
+
+    supplements = _recent_supplements_after_intent(previous, intent)
+    supplements.append(instruction.strip())
+    supplement_text = "\n".join(f"用户补充：{item}" for item in supplements)
+    return f"{intent}\n{supplement_text}"
+
+
+def _last_substantive_user_intent(messages: list[str]) -> str:
+    for item in reversed(messages):
+        if not _is_scope_answer(item) and not _is_language_answer(item):
+            return item
+    return ""
+
+
+def _recent_supplements_after_intent(messages: list[str], intent: str) -> list[str]:
+    supplements = []
+    seen_intent = False
+    for item in messages:
+        if item == intent:
+            seen_intent = True
+            supplements = []
+            continue
+        if seen_intent and (_is_scope_answer(item) or _is_language_answer(item)):
+            supplements.append(item)
+    return supplements[-4:]
+
+
+def _is_scope_answer(text: str) -> bool:
+    normalized = text.strip().lower()
+    return bool(
+        re.fullmatch(r"(全部|全都|所有|全部文档|整份|整份ppt|全ppt|全部ppt|all|whole)", normalized)
+        or re.fullmatch(r"(当前页|当前页面|这一页|这页|当前|current|this slide)", normalized)
+    )
+
+
+def _is_language_answer(text: str) -> bool:
+    normalized = text.strip().lower()
+    return bool(
+        re.fullmatch(
+            r"(中文|汉语|普通话|英文|英语|english|日文|日语|japanese|泰文|泰语|thai|韩文|韩语|korean|法文|法语|french|德文|德语|german|西班牙文|西班牙语|spanish)",
+            normalized,
+        )
+        or re.fullmatch(
+            r"(用|改成|换成)?(中文|汉语|普通话|英文|英语|english|日文|日语|japanese|泰文|泰语|thai|韩文|韩语|korean|法文|法语|french|德文|德语|german|西班牙文|西班牙语|spanish)(讲稿|版本)?",
+            normalized,
+        )
+    )
+
+
+def _needs_language_clarification(instruction: str) -> bool:
+    return _mentions_foreign_audience(instruction) and not _mentions_language(instruction)
+
+
+def _mentions_foreign_audience(text: str) -> bool:
+    return bool(re.search(r"外宾|外国|海外|国际|外方|foreign|international|overseas", text, re.IGNORECASE))
+
+
+def _mentions_language(text: str) -> bool:
+    return bool(
+        re.search(
+            r"中文|汉语|普通话|英文|英语|english|日文|日语|japanese|泰文|泰语|thai|韩文|韩语|korean|法文|法语|french|德文|德语|german|西班牙文|西班牙语|spanish",
+            text,
+            re.IGNORECASE,
+        )
+    )
 
 
 def _needs_scope_clarification(instruction: str, deck_scope: bool, slide_count: int) -> bool:
@@ -258,6 +357,8 @@ def _style_from_text(text: str) -> AgentStylePreset | None:
     if re.search(r"小朋友|儿童|孩子|children|kid", text):
         return STYLE_PRESETS["children"]
     if re.search(r"商务|商业|客户|投资人|正式|严肃|克制|专业|路演|business", text):
+        return STYLE_PRESETS["business"]
+    if re.search(r"外宾|外国|海外|国际|外方|foreign|international|overseas", text):
         return STYLE_PRESETS["business"]
     if re.search(r"领导|高管|老板|管理层|决策层|决策者|executive|brief", text):
         return STYLE_PRESETS["executive"]
