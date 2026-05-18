@@ -99,7 +99,7 @@ def stream_run(run_id: str) -> Generator[str, None, None]:
         yield _event("progress", {"message": f"已应用风格：{preset.name}。"})
         record_user_intent(payload.deck_id, payload.instruction, scope_label, preset.name)
         yield _event("progress", {"message": "已写入本次用户意图到 PPT 记忆。"})
-        narrative_plan = _build_narrative_plan(deck.slides, target_slides, preset)
+        narrative_plan = _build_narrative_plan(deck.slides, target_slides, preset, deck_scope)
         if len(target_slides) > 1:
             yield _event("progress", {"message": "已建立整份 PPT 的讲稿主线，后续页面会按页间承接生成。"})
 
@@ -230,7 +230,7 @@ def _needs_scope_clarification(instruction: str, deck_scope: bool, slide_count: 
     if slide_count <= 1 or deck_scope or _is_current_slide_scope(instruction):
         return False
     text = instruction.lower()
-    asks_for_edit = re.search(r"生成|改成|换成|迁移|应用|修改|润色|重写|优化|style|rewrite|apply", text)
+    asks_for_edit = re.search(r"需要|要|生成|改成|换成|迁移|应用|修改|润色|重写|优化|style|rewrite|apply", text)
     mentions_style = _style_from_text(text) is not None
     return bool(asks_for_edit and mentions_style)
 
@@ -274,8 +274,8 @@ def _scoped_instruction(instruction: str, target_count: int) -> str:
     )
 
 
-def _build_narrative_plan(all_slides, target_slides, preset: AgentStylePreset) -> DeckNarrativePlan:
-    if len(target_slides) <= 1:
+def _build_narrative_plan(all_slides, target_slides, preset: AgentStylePreset, deck_scope: bool) -> DeckNarrativePlan:
+    if len(all_slides) <= 1:
         return DeckNarrativePlan(overview="单页讲稿任务。", slide_roles={})
 
     outline = []
@@ -285,9 +285,10 @@ def _build_narrative_plan(all_slides, target_slides, preset: AgentStylePreset) -
         outline.append(f"第 {slide.index} 页：{title}。{summary}")
 
     slide_roles = {}
-    last_index = target_slides[-1].index
-    for position, slide in enumerate(target_slides, start=1):
-        if position == 1:
+    first_index = all_slides[0].index
+    last_index = all_slides[-1].index
+    for slide in target_slides:
+        if slide.index == first_index:
             role = "开场页：可以有简短开场，交代主题和听众期待。"
         elif slide.index == last_index:
             role = "收束页：承接前文，做总结或行动引导，不要重新问候。"
@@ -295,9 +296,10 @@ def _build_narrative_plan(all_slides, target_slides, preset: AgentStylePreset) -
             role = "内容展开页：直接承接上一页，解释本页重点，不要重新开场或问候。"
         slide_roles[slide.id] = role
 
+    task_scope = "整份 PPT 批量讲稿任务" if deck_scope else "当前页讲稿任务"
     overview = (
-        f"当前是整份 PPT 批量讲稿任务，目标风格是「{preset.name}」。"
-        "请把整份 PPT 当成一段连续演讲，而不是每页独立短文。"
+        f"当前是{task_scope}，目标风格是「{preset.name}」。"
+        "无论修改范围是一页还是整份，都要把当前页放在整份 PPT 的连续演讲中理解，不能把每页当成孤立短文。"
         "全局页面脉络如下：\n"
         + "\n".join(outline)
     )
@@ -305,10 +307,15 @@ def _build_narrative_plan(all_slides, target_slides, preset: AgentStylePreset) -
 
 
 def _deck_context(plan: DeckNarrativePlan, slide, position: int, total: int, memory_context: str) -> str:
-    if total <= 1:
-        return f"{plan.overview}\n\n持久化记忆：\n{memory_context}"
-
     role = plan.slide_roles.get(slide.id, "内容页：承接前后页面，生成自然讲稿。")
+    if total <= 1:
+        return (
+            f"{plan.overview}\n\n"
+            f"当前只修改第 {slide.index} 页，当前页角色：{role}\n"
+            "如果当前页不是整份 PPT 的第一页，不要写成全新开场；要像同一场演讲中的中间页一样自然承接。\n"
+            f"\n持久化记忆：\n{memory_context}"
+        )
+
     transition_rule = (
         "硬性规则：只有整份任务的第一页可以使用完整问候或开场白；"
         "第 2 页及之后必须直接进入内容或用一句自然转场承接上一页，"

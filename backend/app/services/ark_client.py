@@ -21,9 +21,12 @@ def generate_note(
     client = OpenAI(base_url=settings.ark_base_url, api_key=settings.ark_api_key)
     prompt = (
         "你是 Slide Note 的智能备注编辑 agent。请基于幻灯片内容生成一个可执行响应。"
+        f"本次唯一可信的当前页是：第 {slide.index} 页，slide_id={slide.id}。"
+        "历史消息里出现的其他页码、页 ID 或上一次处理结果，都不能作为本次目标页。"
         "你必须只输出 JSON，不要输出 Markdown。JSON 格式："
         '{"message":"给用户看的简短说明","actions":[{"type":"replace_notes","slide_id":"'
         f'{slide.id}","label":"替换当前页备注","content":"可直接放入备注区的中文播报稿"}}]}}。'
+        f"actions[0].slide_id 必须严格等于 {slide.id}。"
         "content 要适合语音播报：自然、清晰、短句、不要使用项目符号堆砌。"
         f"\n\n风格要求：\n{style_instruction or '自然口语化讲稿风格'}"
         f"\n\n整份 PPT 叙事约束：\n{deck_context or '这是单页任务，围绕当前页内容生成讲稿。'}"
@@ -35,7 +38,7 @@ def generate_note(
     messages = [
         {
             "role": "system",
-            "content": "你是可执行 agent，只返回 JSON。支持的 action 只有 replace_notes。",
+            "content": "你是可执行 agent，只返回 JSON。支持的 action 只有 replace_notes。当前页信息只以最后一条用户消息中的任务 prompt 为准。",
         }
     ]
     safe_history = [
