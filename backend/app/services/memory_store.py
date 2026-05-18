@@ -189,9 +189,9 @@ def _memory_path(deck_id: str) -> Path:
 def _audience_from_text(text: str) -> str:
     if re.search(r"小朋友|儿童|孩子|低龄|children|kid", text, re.IGNORECASE):
         return "小朋友"
-    if re.search(r"商务|客户|投资人|路演|business", text, re.IGNORECASE):
+    if re.search(r"商务|客户|投资人|正式|严肃|克制|专业|路演|business", text, re.IGNORECASE):
         return "商务听众"
-    if re.search(r"高管|老板|决策层|executive", text, re.IGNORECASE):
+    if re.search(r"领导|高管|老板|管理层|决策层|决策者|executive", text, re.IGNORECASE):
         return "高管或决策层"
     return ""
 
@@ -205,11 +205,18 @@ def _constraints_from_text(text: str) -> list[str]:
                 "只有第一页可以完整开场，后续页面不要重复问候",
             ]
         )
-    if re.search(r"商务|商业|路演|business", text, re.IGNORECASE):
+    if re.search(r"商务|商业|客户|投资人|正式|严肃|克制|专业|路演|business", text, re.IGNORECASE):
         constraints.extend(
             [
                 "商务风格需要正式克制，先讲结论，再解释依据",
                 "减少儿童化、拟人化和过度活泼表达",
+            ]
+        )
+    if re.search(r"领导|高管|老板|管理层|决策层|决策者|executive", text, re.IGNORECASE):
+        constraints.extend(
+            [
+                "面向领导时要先给判断和价值，再补充关键依据",
+                "压缩铺垫和细节，突出风险、收益和下一步建议",
             ]
         )
     if re.search(r"全部|所有|整份|每页|whole|all", text, re.IGNORECASE):

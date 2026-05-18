@@ -230,8 +230,11 @@ def _needs_scope_clarification(instruction: str, deck_scope: bool, slide_count: 
     if slide_count <= 1 or deck_scope or _is_current_slide_scope(instruction):
         return False
     text = instruction.lower()
-    asks_for_edit = re.search(r"需要|要|生成|改成|换成|迁移|应用|修改|润色|重写|优化|style|rewrite|apply", text)
-    mentions_style = _style_from_text(text) is not None
+    asks_for_edit = re.search(
+        r"需要|要|生成|改成|换成|变成|转成|迁移|应用|修改|调整|润色|重写|优化|面向|适合|style|rewrite|apply",
+        text,
+    )
+    mentions_style = _has_style_intent(text)
     return bool(asks_for_edit and mentions_style)
 
 
@@ -254,15 +257,22 @@ def _style_from_text(text: str) -> AgentStylePreset | None:
     text = text.lower()
     if re.search(r"小朋友|儿童|孩子|children|kid", text):
         return STYLE_PRESETS["children"]
-    if re.search(r"商务|商业|路演|business", text):
+    if re.search(r"商务|商业|客户|投资人|正式|严肃|克制|专业|路演|business", text):
         return STYLE_PRESETS["business"]
-    if re.search(r"高管|老板|executive|brief", text):
+    if re.search(r"领导|高管|老板|管理层|决策层|决策者|executive|brief", text):
         return STYLE_PRESETS["executive"]
     if re.search(r"销售|产品演示|demo|sales", text):
         return STYLE_PRESETS["sales"]
     if re.search(r"自然|口语|播报|narration", text):
         return STYLE_PRESETS["narration"]
     return None
+
+
+def _has_style_intent(text: str) -> bool:
+    return bool(
+        _style_from_text(text)
+        or re.search(r"风格|语气|口吻|受众|面向|听众|汇报|汇报对象|style|tone|audience", text)
+    )
 
 
 def _scoped_instruction(instruction: str, target_count: int) -> str:
