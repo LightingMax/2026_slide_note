@@ -23,6 +23,12 @@ def save_memory(memory: DeckMemory) -> None:
     _memory_path(memory.deck_id).write_text(memory.model_dump_json(indent=2), encoding="utf-8")
 
 
+def clear_memory(deck_id: str) -> DeckMemory:
+    path = _memory_path(deck_id)
+    path.unlink(missing_ok=True)
+    return DeckMemory(deck_id=deck_id)
+
+
 def append_memory_event(
     deck_id: str,
     event_type: str,
@@ -189,7 +195,7 @@ def _memory_path(deck_id: str) -> Path:
 def _audience_from_text(text: str) -> str:
     if re.search(r"小朋友|儿童|孩子|低龄|children|kid", text, re.IGNORECASE):
         return "小朋友"
-    if re.search(r"商务|客户|投资人|正式|严肃|克制|专业|路演|外宾|外国|海外|国际|外方|business|foreign|international|overseas", text, re.IGNORECASE):
+    if re.search(r"商务|客户|投资人|正式|严肃|克制|专业|路演|外宾|外国|海外|国际|外方|中东|business|foreign|international|overseas|middle\s*east", text, re.IGNORECASE):
         return "商务听众"
     if re.search(r"领导|高管|老板|管理层|决策层|决策者|executive", text, re.IGNORECASE):
         return "高管或决策层"
@@ -205,20 +211,22 @@ def _constraints_from_text(text: str) -> list[str]:
                 "只有第一页可以完整开场，后续页面不要重复问候",
             ]
         )
-    if re.search(r"商务|商业|客户|投资人|正式|严肃|克制|专业|路演|外宾|外国|海外|国际|外方|business|foreign|international|overseas", text, re.IGNORECASE):
+    if re.search(r"商务|商业|客户|投资人|正式|严肃|克制|专业|路演|外宾|外国|海外|国际|外方|中东|business|foreign|international|overseas|middle\s*east", text, re.IGNORECASE):
         constraints.extend(
             [
                 "商务风格需要正式克制，先讲结论，再解释依据",
                 "减少儿童化、拟人化和过度活泼表达",
             ]
         )
-    if re.search(r"外宾|外国|海外|国际|外方|foreign|international|overseas", text, re.IGNORECASE):
+    if re.search(r"外宾|外国|海外|国际|外方|中东|foreign|international|overseas|middle\s*east", text, re.IGNORECASE):
         constraints.extend(
             [
                 "面向外宾时需要确认并保持目标语言一致",
                 "对本土机构、政策和案例适当补充背景，避免默认听众熟悉中文语境",
             ]
         )
+    if re.search(r"中东|middle\s*east", text, re.IGNORECASE):
+        constraints.append("面向中东客户时默认生成阿拉伯语讲稿，除非用户另行指定语言")
     if re.search(r"领导|高管|老板|管理层|决策层|决策者|executive", text, re.IGNORECASE):
         constraints.extend(
             [

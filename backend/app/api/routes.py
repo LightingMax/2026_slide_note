@@ -19,6 +19,7 @@ from app.services.agent_runner import cancel_run, create_run, list_style_presets
 from app.services.ark_client import generate_note
 from app.services.memory_store import (
     build_memory_context,
+    clear_memory,
     load_memory,
     record_manual_note_update,
     record_note_reset,
@@ -76,6 +77,15 @@ def get_deck_memory(deck_id: str) -> DeckMemory:
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Deck not found") from exc
     return load_memory(deck_id)
+
+
+@router.delete("/decks/{deck_id}/memory", response_model=DeckMemory)
+def clear_deck_memory(deck_id: str) -> DeckMemory:
+    try:
+        load_deck(deck_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Deck not found") from exc
+    return clear_memory(deck_id)
 
 
 @router.post("/decks/upload", response_model=Deck)

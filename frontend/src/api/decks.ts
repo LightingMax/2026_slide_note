@@ -33,6 +33,10 @@ export async function renderDeck(deckId: string) {
   return data
 }
 
+export async function clearDeckMemory(deckId: string) {
+  await http.delete(`/decks/${deckId}/memory`)
+}
+
 export async function fetchAgentStyles() {
   const { data } = await http.get<AgentStylePreset[]>('/agent/styles')
   return data

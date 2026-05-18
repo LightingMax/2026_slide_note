@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ChatLineRound, Clock, Notebook, Promotion, VideoPause } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import { ChatLineRound, Clock, Delete, Notebook, Promotion, VideoPause } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { ref } from 'vue'
 
 import { useDeckStore } from '@/stores/deck'
@@ -46,14 +46,41 @@ async function stop() {
     loading.value = false
   }
 }
+
+async function clearContext() {
+  try {
+    await ElMessageBox.confirm('清除当前 PPT 的会话历史和后端记忆，不会修改已保存的讲稿。', '清除上下文', {
+      confirmButtonText: '清除',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+    await deckStore.clearCurrentContext()
+    ElMessage.success('上下文已清除')
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error(error instanceof Error ? error.message : '清除失败')
+    }
+  }
+}
 </script>
 
 <template>
   <aside class="workspace-panel flex min-h-0 flex-col rounded-md">
     <div class="border-b border-line p-4 dark:border-slate-700">
-      <div class="flex items-center gap-2 text-sm font-semibold">
-        <el-icon><ChatLineRound /></el-icon>
-        <span>会话</span>
+      <div class="flex items-center justify-between gap-3">
+        <div class="flex items-center gap-2 text-sm font-semibold">
+          <el-icon><ChatLineRound /></el-icon>
+          <span>会话</span>
+        </div>
+        <el-button
+          size="small"
+          text
+          :icon="Delete"
+          :disabled="!deckStore.activeDeck"
+          @click="clearContext"
+        >
+          清除上下文
+        </el-button>
       </div>
     </div>
 

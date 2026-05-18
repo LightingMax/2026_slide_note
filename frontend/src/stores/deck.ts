@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 
 import {
   cancelAgentRun,
+  clearDeckMemory,
   createAgentRun,
   exportDeck,
   fetchAgentStyles,
@@ -162,6 +163,23 @@ export const useDeckStore = defineStore('deck', () => {
     activeRunId.value = ''
   }
 
+  async function clearCurrentContext() {
+    if (!activeDeck.value) return
+    if (agentRunning.value) {
+      await stopAgentRun()
+    }
+    await clearDeckMemory(activeDeck.value.id)
+    const key = activeChatKey.value
+    if (key) {
+      const nextHistory = { ...chatHistory.value }
+      delete nextHistory[key]
+      chatHistory.value = nextHistory
+      localStorage.setItem(chatStorageKey, JSON.stringify(nextHistory))
+    }
+    chatMessages.value = []
+    addActivity('清除上下文', `${activeDeck.value.filename} 的会话历史和 PPT 记忆已清空`)
+  }
+
   function addActivity(title: string, detail: string) {
     activityLog.value.unshift({
       id: crypto.randomUUID(),
@@ -274,6 +292,7 @@ export const useDeckStore = defineStore('deck', () => {
     askAssistant,
     applyStyleTemplate,
     stopAgentRun,
+    clearCurrentContext,
     rerenderSnapshots,
     addActivity,
     addAgentMessage

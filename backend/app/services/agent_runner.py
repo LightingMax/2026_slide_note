@@ -89,7 +89,8 @@ def stream_run(run_id: str) -> Generator[str, None, None]:
             yield _event("done", {"deck": deck.model_dump()})
             return
 
-        deck_scope = _is_deck_scope(instruction)
+        current_scope = _is_current_slide_scope(instruction)
+        deck_scope = _is_deck_scope(instruction) and not current_scope
         if _needs_scope_clarification(instruction, deck_scope, len(deck.slides)):
             yield _event(
                 "assistant",
@@ -139,6 +140,7 @@ def stream_run(run_id: str) -> Generator[str, None, None]:
                     position,
                     len(target_slides),
                     build_memory_context(payload.deck_id, slide.id),
+                    _language_context(instruction),
                 ),
             )
             yield _event("assistant", response.model_dump())
@@ -205,6 +207,10 @@ def _resolve_target_slides(slides, slide_id: str, deck_scope: bool):
 def _is_deck_scope(instruction: str) -> bool:
     text = instruction.lower()
     patterns = [
+        r"这次来的是.*客户.*讲稿",
+        r"(客户|外宾|来宾|访客).*讲稿",
+        r"给我.*讲稿",
+        r"做.*讲稿",
         r"全部(的)?",
         r"全都",
         r"都要",
@@ -312,16 +318,23 @@ def _needs_language_clarification(instruction: str) -> bool:
 
 
 def _mentions_foreign_audience(text: str) -> bool:
-    return bool(re.search(r"外宾|外国|海外|国际|外方|foreign|international|overseas", text, re.IGNORECASE))
+    return bool(
+        re.search(
+            r"外宾|外国|海外|国际|外方|中东|阿拉伯客户|foreign|international|overseas|middle\s*east",
+            text,
+            re.IGNORECASE,
+        )
+    )
 
 
 def _mentions_language(text: str) -> bool:
     return bool(
         re.search(
-            r"中文|汉语|普通话|英文|英语|english|日文|日语|japanese|泰文|泰语|thai|韩文|韩语|korean|法文|法语|french|德文|德语|german|西班牙文|西班牙语|spanish",
+            r"中文|汉语|普通话|英文|英语|english|阿拉伯文|阿拉伯语|arabic|日文|日语|japanese|泰文|泰语|thai|韩文|韩语|korean|法文|法语|french|德文|德语|german|西班牙文|西班牙语|spanish",
             text,
             re.IGNORECASE,
         )
+        or _mentions_middle_east(text)
     )
 
 
@@ -356,7 +369,7 @@ def _style_from_text(text: str) -> AgentStylePreset | None:
     text = text.lower()
     if re.search(r"小朋友|儿童|孩子|children|kid", text):
         return STYLE_PRESETS["children"]
-    if re.search(r"商务|商业|客户|投资人|正式|严肃|克制|专业|路演|business", text):
+    if re.search(r"商务|商业|客户|投资人|正式|严肃|克制|专业|路演|中东|外宾|外国|海外|国际|外方|business|middle\s*east|foreign|international|overseas", text):
         return STYLE_PRESETS["business"]
     if re.search(r"外宾|外国|海外|国际|外方|foreign|international|overseas", text):
         return STYLE_PRESETS["business"]
@@ -374,6 +387,26 @@ def _has_style_intent(text: str) -> bool:
         _style_from_text(text)
         or re.search(r"风格|语气|口吻|受众|面向|听众|汇报|汇报对象|style|tone|audience", text)
     )
+
+
+def _language_context(instruction: str) -> str:
+    if _mentions_middle_east(instruction) and not re.search(r"阿拉伯文|阿拉伯语|arabic", instruction, re.IGNORECASE):
+        return "目标语言：阿拉伯语。用户提到中东客户时，默认生成阿拉伯语讲稿。"
+    if re.search(r"阿拉伯文|阿拉伯语|arabic", instruction, re.IGNORECASE):
+        return "目标语言：阿拉伯语。"
+    if re.search(r"英文|英语|english", instruction, re.IGNORECASE):
+        return "目标语言：英文。"
+    if re.search(r"中文|汉语|普通话", instruction, re.IGNORECASE):
+        return "目标语言：中文。"
+    if re.search(r"日文|日语|japanese", instruction, re.IGNORECASE):
+        return "目标语言：日文。"
+    if re.search(r"泰文|泰语|thai", instruction, re.IGNORECASE):
+        return "目标语言：泰文。"
+    return ""
+
+
+def _mentions_middle_east(text: str) -> bool:
+    return bool(re.search(r"中东|middle\s*east|阿拉伯客户", text, re.IGNORECASE))
 
 
 def _scoped_instruction(instruction: str, target_count: int) -> str:
@@ -417,13 +450,22 @@ def _build_narrative_plan(all_slides, target_slides, preset: AgentStylePreset, d
     return DeckNarrativePlan(overview=overview, slide_roles=slide_roles)
 
 
-def _deck_context(plan: DeckNarrativePlan, slide, position: int, total: int, memory_context: str) -> str:
+def _deck_context(
+    plan: DeckNarrativePlan,
+    slide,
+    position: int,
+    total: int,
+    memory_context: str,
+    language_context: str = "",
+) -> str:
     role = plan.slide_roles.get(slide.id, "内容页：承接前后页面，生成自然讲稿。")
+    language_line = f"\n语言要求：{language_context}" if language_context else ""
     if total <= 1:
         return (
             f"{plan.overview}\n\n"
             f"当前只修改第 {slide.index} 页，当前页角色：{role}\n"
             "如果当前页不是整份 PPT 的第一页，不要写成全新开场；要像同一场演讲中的中间页一样自然承接。\n"
+            f"{language_line}\n"
             f"\n持久化记忆：\n{memory_context}"
         )
 
@@ -438,6 +480,7 @@ def _deck_context(plan: DeckNarrativePlan, slide, position: int, total: int, mem
         f"当前页角色：{role}\n"
         f"{transition_rule}\n"
         "讲稿需要像同一位讲者连续讲完整份 PPT，避免每页重复同一种句式。"
+        f"{language_line}"
         f"\n\n持久化记忆：\n{memory_context}"
     )
 
