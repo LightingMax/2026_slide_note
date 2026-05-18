@@ -2,6 +2,7 @@ import json
 import re
 import uuid
 from collections.abc import Generator
+from dataclasses import dataclass
 
 from app.models.deck import AgentRunCreate, AgentStylePreset
 from app.services.ark_client import generate_note
@@ -38,6 +39,12 @@ STYLE_PRESETS = {
 
 _RUNS: dict[str, AgentRunCreate] = {}
 _CANCELLED_RUNS: set[str] = set()
+
+
+@dataclass(frozen=True)
+class DeckNarrativePlan:
+    overview: str
+    slide_roles: dict[str, str]
 
 
 def list_style_presets() -> list[AgentStylePreset]:
@@ -90,6 +97,9 @@ def stream_run(run_id: str) -> Generator[str, None, None]:
 
         preset = _resolve_style_preset(payload.style_preset, payload.instruction, context_text)
         yield _event("progress", {"message": f"已应用风格：{preset.name}。"})
+        narrative_plan = _build_narrative_plan(deck.slides, target_slides, preset)
+        if len(target_slides) > 1:
+            yield _event("progress", {"message": "已建立整份 PPT 的讲稿主线，后续页面会按页间承接生成。"})
 
         changed = False
         for position, slide in enumerate(target_slides, start=1):
@@ -108,6 +118,7 @@ def stream_run(run_id: str) -> Generator[str, None, None]:
                 _scoped_instruction(payload.instruction, len(target_slides)),
                 [item.model_dump() for item in payload.messages],
                 preset.description,
+                _deck_context(narrative_plan, slide, position, len(target_slides)),
             )
             yield _event("assistant", response.model_dump())
 
@@ -115,19 +126,18 @@ def stream_run(run_id: str) -> Generator[str, None, None]:
                 if _is_cancelled(run_id):
                     yield _event("cancelled", {"message": "任务已停止。"})
                     return
+                if action.type != "replace_notes" or not action.content.strip():
+                    continue
+                bound_action = {
+                    "type": action.type,
+                    "slide_id": slide.id,
+                    "label": action.label,
+                    "content": action.content,
+                }
                 yield _event("progress", {"message": f"正在执行动作：{action.label}。"})
-                if action.type == "replace_notes" and action.slide_id == slide.id:
-                    slide.notes = action.content
-                    changed = True
-                    yield _event(
-                        "action",
-                        {
-                            "type": action.type,
-                            "slide_id": action.slide_id,
-                            "label": action.label,
-                            "content": action.content,
-                        },
-                    )
+                slide.notes = action.content
+                changed = True
+                yield _event("action", bound_action)
 
         if changed:
             save_deck(deck)
@@ -229,6 +239,62 @@ def _scoped_instruction(instruction: str, target_count: int) -> str:
         f"{instruction}\n\n这是一个整份 PPT 的批量任务。"
         "请只为当前这一页生成讲稿，保持所选风格一致，不要提到其他页的处理进度。"
     )
+
+
+def _build_narrative_plan(all_slides, target_slides, preset: AgentStylePreset) -> DeckNarrativePlan:
+    if len(target_slides) <= 1:
+        return DeckNarrativePlan(overview="单页讲稿任务。", slide_roles={})
+
+    outline = []
+    for slide in all_slides:
+        title = slide.title or f"第 {slide.index} 页"
+        summary = _compact_text(slide.text or slide.notes or "")
+        outline.append(f"第 {slide.index} 页：{title}。{summary}")
+
+    slide_roles = {}
+    last_index = target_slides[-1].index
+    for position, slide in enumerate(target_slides, start=1):
+        if position == 1:
+            role = "开场页：可以有简短开场，交代主题和听众期待。"
+        elif slide.index == last_index:
+            role = "收束页：承接前文，做总结或行动引导，不要重新问候。"
+        else:
+            role = "内容展开页：直接承接上一页，解释本页重点，不要重新开场或问候。"
+        slide_roles[slide.id] = role
+
+    overview = (
+        f"当前是整份 PPT 批量讲稿任务，目标风格是「{preset.name}」。"
+        "请把整份 PPT 当成一段连续演讲，而不是每页独立短文。"
+        "全局页面脉络如下：\n"
+        + "\n".join(outline)
+    )
+    return DeckNarrativePlan(overview=overview, slide_roles=slide_roles)
+
+
+def _deck_context(plan: DeckNarrativePlan, slide, position: int, total: int) -> str:
+    if total <= 1:
+        return plan.overview
+
+    role = plan.slide_roles.get(slide.id, "内容页：承接前后页面，生成自然讲稿。")
+    transition_rule = (
+        "硬性规则：只有整份任务的第一页可以使用完整问候或开场白；"
+        "第 2 页及之后必须直接进入内容或用一句自然转场承接上一页，"
+        "不要重复“小朋友们好呀”“大家好”“今天给大家介绍”这类开场。"
+    )
+    return (
+        f"{plan.overview}\n\n"
+        f"当前正在写第 {position}/{total} 个目标页面，对应 PPT 第 {slide.index} 页。\n"
+        f"当前页角色：{role}\n"
+        f"{transition_rule}\n"
+        "讲稿需要像同一位讲者连续讲完整份 PPT，避免每页重复同一种句式。"
+    )
+
+
+def _compact_text(text: str, limit: int = 120) -> str:
+    compact = re.sub(r"\s+", " ", text).strip()
+    if len(compact) <= limit:
+        return compact
+    return compact[:limit].rstrip() + "..."
 
 
 def _context_text(instruction: str, messages) -> str:

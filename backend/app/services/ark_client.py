@@ -12,6 +12,7 @@ def generate_note(
     instruction: str,
     history: list[dict[str, str]],
     style_instruction: str = "",
+    deck_context: str = "",
 ) -> ChatResponse:
     settings = get_settings()
     if not settings.ark_api_key:
@@ -25,6 +26,7 @@ def generate_note(
         f'{slide.id}","label":"替换当前页备注","content":"可直接放入备注区的中文播报稿"}}]}}。'
         "content 要适合语音播报：自然、清晰、短句、不要使用项目符号堆砌。"
         f"\n\n风格要求：\n{style_instruction or '自然口语化讲稿风格'}"
+        f"\n\n整份 PPT 叙事约束：\n{deck_context or '这是单页任务，围绕当前页内容生成讲稿。'}"
         "\n\n幻灯片标题："
         f"{slide.title}\n\n幻灯片文字：\n{slide.text or '无'}\n\n当前备注：\n{slide.notes or '无'}"
         f"\n\n用户要求：{instruction}"
