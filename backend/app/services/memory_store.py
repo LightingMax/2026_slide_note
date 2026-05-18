@@ -53,7 +53,8 @@ def record_user_intent(deck_id: str, instruction: str, scope: str, style_name: s
     audience = _audience_from_text(f"{instruction}\n{style_name}")
     if audience:
         memory.audience = audience
-    if not memory.deck_goal:
+        memory.global_constraints = _constraints_for_audience(memory.global_constraints, audience)
+    if not memory.deck_goal or not scope.startswith("第 "):
         memory.deck_goal = _goal_from_instruction(instruction, scope)
     memory.global_constraints = _merge_constraints(
         memory.global_constraints,
@@ -204,9 +205,26 @@ def _constraints_from_text(text: str) -> list[str]:
                 "只有第一页可以完整开场，后续页面不要重复问候",
             ]
         )
+    if re.search(r"商务|商业|路演|business", text, re.IGNORECASE):
+        constraints.extend(
+            [
+                "商务风格需要正式克制，先讲结论，再解释依据",
+                "减少儿童化、拟人化和过度活泼表达",
+            ]
+        )
     if re.search(r"全部|所有|整份|每页|whole|all", text, re.IGNORECASE):
         constraints.append("批量处理时保持整份 PPT 的叙事连续性")
     return constraints
+
+
+def _constraints_for_audience(existing: list[str], audience: str) -> list[str]:
+    if audience == "小朋友":
+        blocked = ["商务风格", "儿童化"]
+    elif audience == "商务听众":
+        blocked = ["小朋友", "儿童", "低龄"]
+    else:
+        return existing
+    return [item for item in existing if not any(word in item for word in blocked)]
 
 
 def _merge_constraints(existing: list[str], additions: list[str]) -> list[str]:

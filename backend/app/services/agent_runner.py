@@ -76,7 +76,6 @@ def stream_run(run_id: str) -> Generator[str, None, None]:
         deck = load_deck(payload.deck_id)
         yield _event("progress", {"message": "正在读取演示文稿、当前页内容和原始备注。"})
 
-        context_text = _context_text(payload.instruction, payload.messages)
         deck_scope = _is_deck_scope(payload.instruction)
         if _needs_scope_clarification(payload.instruction, deck_scope, len(deck.slides)):
             yield _event(
@@ -96,7 +95,7 @@ def stream_run(run_id: str) -> Generator[str, None, None]:
         scope_label = "整份演示文稿" if deck_scope else f"第 {target_slides[0].index} 页"
         yield _event("progress", {"message": f"已识别任务范围：{scope_label}。"})
 
-        preset = _resolve_style_preset(payload.style_preset, payload.instruction, context_text)
+        preset = _resolve_style_preset(payload.style_preset, payload.instruction, payload.messages)
         yield _event("progress", {"message": f"已应用风格：{preset.name}。"})
         record_user_intent(payload.deck_id, payload.instruction, scope_label, preset.name)
         yield _event("progress", {"message": "已写入本次用户意图到 PPT 记忆。"})
@@ -193,6 +192,10 @@ def _resolve_target_slides(slides, slide_id: str, deck_scope: bool):
 def _is_deck_scope(instruction: str) -> bool:
     text = instruction.lower()
     patterns = [
+        r"全部(的)?",
+        r"全都",
+        r"都要",
+        r"所有(的)?",
         r"所有\s*(幻灯片|页面|页)",
         r"所有\s*风格",
         r"所有.*(换成|改成|迁移|修改)",
@@ -227,18 +230,21 @@ def _needs_scope_clarification(instruction: str, deck_scope: bool, slide_count: 
     if slide_count <= 1 or deck_scope or _is_current_slide_scope(instruction):
         return False
     text = instruction.lower()
-    asks_for_edit = re.search(r"改成|换成|迁移|应用|修改|润色|重写|优化|style|rewrite|apply", text)
+    asks_for_edit = re.search(r"生成|改成|换成|迁移|应用|修改|润色|重写|优化|style|rewrite|apply", text)
     mentions_style = _style_from_text(text) is not None
     return bool(asks_for_edit and mentions_style)
 
 
-def _resolve_style_preset(style_preset: str, instruction: str, context_text: str) -> AgentStylePreset:
+def _resolve_style_preset(style_preset: str, instruction: str, messages) -> AgentStylePreset:
     explicit = _style_from_text(instruction)
     if explicit:
         return explicit
-    contextual = _style_from_text(context_text)
-    if contextual:
-        return contextual
+    for item in reversed(messages[-12:]):
+        if item.role not in {"user", "assistant"} or not item.content:
+            continue
+        contextual = _style_from_text(item.content)
+        if contextual:
+            return contextual
     if style_preset != "auto":
         return STYLE_PRESETS.get(style_preset, STYLE_PRESETS["narration"])
     return STYLE_PRESETS["narration"]
