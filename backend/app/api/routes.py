@@ -14,8 +14,15 @@ from app.models.deck import (
     Deck,
     NoteUpdate,
 )
+from app.models.memory import DeckMemory
 from app.services.agent_runner import cancel_run, create_run, list_style_presets, stream_run
 from app.services.ark_client import generate_note
+from app.services.memory_store import (
+    build_memory_context,
+    load_memory,
+    record_manual_note_update,
+    record_note_reset,
+)
 from app.services.ppt_exporter import export_deck_with_notes, find_uploaded_pptx
 from app.services.ppt_parser import parse_pptx
 from app.services.ppt_renderer import render_deck_snapshots
@@ -62,6 +69,15 @@ def get_deck(deck_id: str) -> Deck:
         raise HTTPException(status_code=404, detail="Deck not found") from exc
 
 
+@router.get("/decks/{deck_id}/memory", response_model=DeckMemory)
+def get_deck_memory(deck_id: str) -> DeckMemory:
+    try:
+        load_deck(deck_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Deck not found") from exc
+    return load_memory(deck_id)
+
+
 @router.post("/decks/upload", response_model=Deck)
 async def upload_deck(file: UploadFile = File(...)) -> Deck:
     if not file.filename or Path(file.filename).suffix.lower() not in {".pptx"}:
@@ -90,6 +106,7 @@ def update_notes(deck_id: str, slide_id: str, payload: NoteUpdate) -> Deck:
         if slide.id == slide_id:
             slide.notes = payload.notes
             save_deck(deck)
+            record_manual_note_update(deck_id, slide, payload.notes)
             return deck
     raise HTTPException(status_code=404, detail="Slide not found")
 
@@ -105,6 +122,7 @@ def reset_notes(deck_id: str, slide_id: str) -> Deck:
         if slide.id == slide_id:
             slide.notes = slide.original_notes or ""
             save_deck(deck)
+            record_note_reset(deck_id, slide)
             return deck
     raise HTTPException(status_code=404, detail="Slide not found")
 
@@ -157,7 +175,12 @@ def chat(deck_id: str, payload: ChatRequest) -> ChatResponse:
         raise HTTPException(status_code=404, detail="Slide not found")
 
     try:
-        response = generate_note(slide, payload.instruction, [item.model_dump() for item in payload.messages])
+        response = generate_note(
+            slide,
+            payload.instruction,
+            [item.model_dump() for item in payload.messages],
+            deck_context=build_memory_context(deck_id, slide.id),
+        )
     except RuntimeError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     return response

@@ -15,6 +15,7 @@ class Settings(BaseSettings):
 
     upload_dir: Path = BASE_DIR / "uploads"
     data_dir: Path = BASE_DIR / "data"
+    memory_dir: Path = BASE_DIR / "data" / "memory"
     media_dir: Path = BASE_DIR / "media"
     static_dir: Path = BASE_DIR / "static"
     libreoffice_path: str = ""
@@ -33,6 +34,7 @@ def get_settings() -> Settings:
     settings = Settings()
     settings.upload_dir.mkdir(parents=True, exist_ok=True)
     settings.data_dir.mkdir(parents=True, exist_ok=True)
+    settings.memory_dir.mkdir(parents=True, exist_ok=True)
     settings.media_dir.mkdir(parents=True, exist_ok=True)
     settings.static_dir.mkdir(parents=True, exist_ok=True)
     return settings

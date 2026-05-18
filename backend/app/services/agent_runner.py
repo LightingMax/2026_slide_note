@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from app.models.deck import AgentRunCreate, AgentStylePreset
 from app.services.ark_client import generate_note
+from app.services.memory_store import build_memory_context, record_agent_note_change, record_user_intent
 from app.services.storage import load_deck, save_deck
 
 
@@ -97,6 +98,8 @@ def stream_run(run_id: str) -> Generator[str, None, None]:
 
         preset = _resolve_style_preset(payload.style_preset, payload.instruction, context_text)
         yield _event("progress", {"message": f"已应用风格：{preset.name}。"})
+        record_user_intent(payload.deck_id, payload.instruction, scope_label, preset.name)
+        yield _event("progress", {"message": "已写入本次用户意图到 PPT 记忆。"})
         narrative_plan = _build_narrative_plan(deck.slides, target_slides, preset)
         if len(target_slides) > 1:
             yield _event("progress", {"message": "已建立整份 PPT 的讲稿主线，后续页面会按页间承接生成。"})
@@ -118,7 +121,13 @@ def stream_run(run_id: str) -> Generator[str, None, None]:
                 _scoped_instruction(payload.instruction, len(target_slides)),
                 [item.model_dump() for item in payload.messages],
                 preset.description,
-                _deck_context(narrative_plan, slide, position, len(target_slides)),
+                _deck_context(
+                    narrative_plan,
+                    slide,
+                    position,
+                    len(target_slides),
+                    build_memory_context(payload.deck_id, slide.id),
+                ),
             )
             yield _event("assistant", response.model_dump())
 
@@ -134,9 +143,27 @@ def stream_run(run_id: str) -> Generator[str, None, None]:
                     "label": action.label,
                     "content": action.content,
                 }
+                if action.slide_id != slide.id:
+                    yield _event(
+                        "progress",
+                        {
+                            "message": (
+                                f"模型声明目标页为 {action.slide_id}，当前执行页为 {slide.id}，"
+                                "已按任务上下文校正。"
+                            )
+                        },
+                    )
                 yield _event("progress", {"message": f"正在执行动作：{action.label}。"})
                 slide.notes = action.content
                 changed = True
+                record_agent_note_change(
+                    payload.deck_id,
+                    slide,
+                    payload.instruction,
+                    preset.name,
+                    action.content,
+                    action.slide_id,
+                )
                 yield _event("action", bound_action)
 
         if changed:
@@ -271,9 +298,9 @@ def _build_narrative_plan(all_slides, target_slides, preset: AgentStylePreset) -
     return DeckNarrativePlan(overview=overview, slide_roles=slide_roles)
 
 
-def _deck_context(plan: DeckNarrativePlan, slide, position: int, total: int) -> str:
+def _deck_context(plan: DeckNarrativePlan, slide, position: int, total: int, memory_context: str) -> str:
     if total <= 1:
-        return plan.overview
+        return f"{plan.overview}\n\n持久化记忆：\n{memory_context}"
 
     role = plan.slide_roles.get(slide.id, "内容页：承接前后页面，生成自然讲稿。")
     transition_rule = (
@@ -287,6 +314,7 @@ def _deck_context(plan: DeckNarrativePlan, slide, position: int, total: int) -> 
         f"当前页角色：{role}\n"
         f"{transition_rule}\n"
         "讲稿需要像同一位讲者连续讲完整份 PPT，避免每页重复同一种句式。"
+        f"\n\n持久化记忆：\n{memory_context}"
     )
 
 
