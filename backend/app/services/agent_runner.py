@@ -70,6 +70,17 @@ def stream_run(run_id: str) -> Generator[str, None, None]:
 
         context_text = _context_text(payload.instruction, payload.messages)
         deck_scope = _is_deck_scope(payload.instruction)
+        if _needs_scope_clarification(payload.instruction, deck_scope, len(deck.slides)):
+            yield _event(
+                "assistant",
+                {
+                    "text": "",
+                    "message": "我需要确认一下：这次是只修改当前页，还是应用到整份 PPT？你可以回复“当前页”或“全部文档”。",
+                    "actions": [],
+                },
+            )
+            yield _event("done", {"deck": deck.model_dump()})
+            return
         target_slides = _resolve_target_slides(deck.slides, payload.slide_id, deck_scope)
         if not target_slides:
             yield _event("error", {"message": "Slide not found"})
@@ -146,9 +157,14 @@ def _is_deck_scope(instruction: str) -> bool:
     text = instruction.lower()
     patterns = [
         r"所有\s*(幻灯片|页面|页)",
+        r"所有\s*风格",
+        r"所有.*(换成|改成|迁移|修改)",
         r"全部\s*(幻灯片|页面|页)",
+        r"全部\s*(文档|讲稿|备注|风格)",
         r"整份\s*(ppt|演示文稿|幻灯片|文档)",
         r"全\s*(ppt|演示文稿|幻灯片)",
+        r"应用到\s*(全部|所有|整份|全)",
+        r"(全部|所有|整份).*(应用|执行|修改|替换)",
         r"每一页",
         r"每页",
         r"all\s+slides",
@@ -156,6 +172,27 @@ def _is_deck_scope(instruction: str) -> bool:
         r"whole\s+(deck|ppt|presentation)",
     ]
     return any(re.search(pattern, text) for pattern in patterns)
+
+
+def _is_current_slide_scope(instruction: str) -> bool:
+    text = instruction.lower()
+    patterns = [
+        r"当前\s*(页|页面|幻灯片)",
+        r"这一\s*(页|页面|张)",
+        r"这\s*(页|张)",
+        r"current\s+slide",
+        r"this\s+slide",
+    ]
+    return any(re.search(pattern, text) for pattern in patterns)
+
+
+def _needs_scope_clarification(instruction: str, deck_scope: bool, slide_count: int) -> bool:
+    if slide_count <= 1 or deck_scope or _is_current_slide_scope(instruction):
+        return False
+    text = instruction.lower()
+    asks_for_edit = re.search(r"改成|换成|迁移|应用|修改|润色|重写|优化|style|rewrite|apply", text)
+    mentions_style = _style_from_text(text) is not None
+    return bool(asks_for_edit and mentions_style)
 
 
 def _resolve_style_preset(style_preset: str, instruction: str, context_text: str) -> AgentStylePreset:
