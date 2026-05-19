@@ -318,7 +318,7 @@ def _is_language_answer(text: str) -> bool:
 
 
 def _needs_language_clarification(instruction: str) -> bool:
-    return _mentions_foreign_audience(instruction) and not _mentions_language(instruction)
+    return _mentions_language_ambiguous_customer(instruction) and not _mentions_language(instruction)
 
 
 def _mentions_foreign_audience(text: str) -> bool:
@@ -328,6 +328,12 @@ def _mentions_foreign_audience(text: str) -> bool:
             text,
             re.IGNORECASE,
         )
+    )
+
+
+def _mentions_language_ambiguous_customer(text: str) -> bool:
+    return _mentions_foreign_audience(text) or bool(
+        re.search(r"松下|panasonic|索尼|sony|丰田|toyota|本田|honda|日本客户|日本的客户|日韩客户", text, re.IGNORECASE)
     )
 
 
@@ -404,6 +410,8 @@ def _language_context(instruction: str) -> str:
         return "目标语言：中文。content 字段必须使用中文。"
     if re.search(r"日文|日语|japanese", instruction, re.IGNORECASE):
         return "目标语言：日文。content 字段必须使用日文。"
+    if re.search(r"松下|panasonic|索尼|sony|丰田|toyota|本田|honda|日本客户|日本的客户", instruction, re.IGNORECASE):
+        return "目标语言：日文。用户已确认使用日文时，content 字段必须使用日文。"
     if re.search(r"泰文|泰语|thai", instruction, re.IGNORECASE):
         return "目标语言：泰文。content 字段必须使用泰文。"
     return ""
@@ -417,6 +425,8 @@ def _language_label(instruction: str) -> str:
     if re.search(r"中文|汉语|普通话", instruction, re.IGNORECASE):
         return "中文"
     if re.search(r"日文|日语|japanese", instruction, re.IGNORECASE):
+        return "日文"
+    if re.search(r"松下|panasonic|索尼|sony|丰田|toyota|本田|honda|日本客户|日本的客户", instruction, re.IGNORECASE):
         return "日文"
     if re.search(r"泰文|泰语|thai", instruction, re.IGNORECASE):
         return "泰文"
