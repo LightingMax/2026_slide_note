@@ -111,6 +111,10 @@ def stream_run(run_id: str) -> Generator[str, None, None]:
 
         preset = _resolve_style_preset(payload.style_preset, instruction, payload.messages)
         yield _event("progress", {"message": f"已应用风格：{preset.name}。"})
+        language_context = _language_context(instruction)
+        language_label = _language_label(instruction)
+        if language_label:
+            yield _event("progress", {"message": f"已识别讲稿语言：{language_label}。"})
         record_user_intent(payload.deck_id, instruction, scope_label, preset.name)
         yield _event("progress", {"message": "已写入本次用户意图到 PPT 记忆。"})
         narrative_plan = _build_narrative_plan(deck.slides, target_slides, preset, deck_scope)
@@ -140,7 +144,7 @@ def stream_run(run_id: str) -> Generator[str, None, None]:
                     position,
                     len(target_slides),
                     build_memory_context(payload.deck_id, slide.id),
-                    _language_context(instruction),
+                    language_context,
                 ),
             )
             yield _event("assistant", response.model_dump())
@@ -391,17 +395,31 @@ def _has_style_intent(text: str) -> bool:
 
 def _language_context(instruction: str) -> str:
     if _mentions_middle_east(instruction) and not re.search(r"阿拉伯文|阿拉伯语|arabic", instruction, re.IGNORECASE):
-        return "目标语言：阿拉伯语。用户提到中东客户时，默认生成阿拉伯语讲稿。"
+        return "目标语言：阿拉伯语。用户提到中东客户时，默认生成阿拉伯语讲稿。content 字段必须使用阿拉伯语，不要输出中文讲稿。"
     if re.search(r"阿拉伯文|阿拉伯语|arabic", instruction, re.IGNORECASE):
-        return "目标语言：阿拉伯语。"
+        return "目标语言：阿拉伯语。content 字段必须使用阿拉伯语。"
     if re.search(r"英文|英语|english", instruction, re.IGNORECASE):
-        return "目标语言：英文。"
+        return "目标语言：英文。content 字段必须使用英文。"
     if re.search(r"中文|汉语|普通话", instruction, re.IGNORECASE):
-        return "目标语言：中文。"
+        return "目标语言：中文。content 字段必须使用中文。"
     if re.search(r"日文|日语|japanese", instruction, re.IGNORECASE):
-        return "目标语言：日文。"
+        return "目标语言：日文。content 字段必须使用日文。"
     if re.search(r"泰文|泰语|thai", instruction, re.IGNORECASE):
-        return "目标语言：泰文。"
+        return "目标语言：泰文。content 字段必须使用泰文。"
+    return ""
+
+
+def _language_label(instruction: str) -> str:
+    if _mentions_middle_east(instruction) or re.search(r"阿拉伯文|阿拉伯语|arabic", instruction, re.IGNORECASE):
+        return "阿拉伯语"
+    if re.search(r"英文|英语|english", instruction, re.IGNORECASE):
+        return "英文"
+    if re.search(r"中文|汉语|普通话", instruction, re.IGNORECASE):
+        return "中文"
+    if re.search(r"日文|日语|japanese", instruction, re.IGNORECASE):
+        return "日文"
+    if re.search(r"泰文|泰语|thai", instruction, re.IGNORECASE):
+        return "泰文"
     return ""
 
 

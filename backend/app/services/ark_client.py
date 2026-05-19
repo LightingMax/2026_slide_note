@@ -25,9 +25,9 @@ def generate_note(
         "历史消息里出现的其他页码、页 ID 或上一次处理结果，都不能作为本次目标页。"
         "你必须只输出 JSON，不要输出 Markdown。JSON 格式："
         '{"message":"给用户看的简短说明","actions":[{"type":"replace_notes","slide_id":"'
-        f'{slide.id}","label":"替换当前页备注","content":"可直接放入备注区的中文播报稿"}}]}}。'
+        f'{slide.id}","label":"替换当前页备注","content":"可直接放入备注区的目标语言播报稿"}}]}}。'
         f"actions[0].slide_id 必须严格等于 {slide.id}。"
-        "content 要适合语音播报：自然、清晰、短句、不要使用项目符号堆砌。"
+        "content 必须使用叙事约束中指定的目标语言，适合语音播报：自然、清晰、短句、不要使用项目符号堆砌。"
         f"\n\n风格要求：\n{style_instruction or '自然口语化讲稿风格'}"
         f"\n\n整份 PPT 叙事约束：\n{deck_context or '这是单页任务，围绕当前页内容生成讲稿。'}"
         "\n\n幻灯片标题："

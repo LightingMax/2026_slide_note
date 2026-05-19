@@ -226,7 +226,7 @@ def _constraints_from_text(text: str) -> list[str]:
             ]
         )
     if re.search(r"中东|middle\s*east", text, re.IGNORECASE):
-        constraints.append("面向中东客户时默认生成阿拉伯语讲稿，除非用户另行指定语言")
+        constraints.append("面向中东客户时默认生成阿拉伯语讲稿，除非用户另行指定语言；不要输出中文讲稿")
     if re.search(r"领导|高管|老板|管理层|决策层|决策者|executive", text, re.IGNORECASE):
         constraints.extend(
             [
