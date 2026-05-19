@@ -82,7 +82,7 @@ def stream_run(run_id: str) -> Generator[str, None, None]:
                 "assistant",
                 {
                     "text": "",
-                    "message": "我需要先确认讲稿语言：这次面向外宾，是要中文讲稿、英文讲稿，还是其他语言？你可以回复“中文”“英文”“日文”“泰文”等。",
+                    "message": "我需要先确认讲稿语言：这次客户讲稿是要中文、英文、日文，还是其他语言？你可以回复“中文”“英文”“日文”“泰文”等。",
                     "actions": [],
                 },
             )
@@ -107,12 +107,24 @@ def stream_run(run_id: str) -> Generator[str, None, None]:
             yield _event("error", {"message": "Slide not found"})
             return
         scope_label = "整份演示文稿" if deck_scope else f"第 {target_slides[0].index} 页"
-        yield _event("progress", {"message": f"已识别任务范围：{scope_label}。"})
-
         preset = _resolve_style_preset(payload.style_preset, instruction, payload.messages)
-        yield _event("progress", {"message": f"已应用风格：{preset.name}。"})
         language_context = _language_context(instruction)
         language_label = _language_label(instruction)
+
+        if _needs_plan_confirmation(instruction):
+            yield _event(
+                "assistant",
+                {
+                    "text": "",
+                    "message": _plan_message(deck, target_slides, scope_label, preset, language_label, instruction),
+                    "actions": [],
+                },
+            )
+            yield _event("done", {"deck": deck.model_dump()})
+            return
+
+        yield _event("progress", {"message": f"已识别任务范围：{scope_label}。"})
+        yield _event("progress", {"message": f"已应用风格：{preset.name}。"})
         if language_label:
             yield _event("progress", {"message": f"已识别讲稿语言：{language_label}。"})
         record_user_intent(payload.deck_id, instruction, scope_label, preset.name)
@@ -262,7 +274,7 @@ def _resolve_effective_instruction(instruction: str, messages) -> str:
     else:
         previous = user_messages
 
-    if not (_is_scope_answer(instruction) or _is_language_answer(instruction)):
+    if not (_is_scope_answer(instruction) or _is_language_answer(instruction) or _is_confirmation_answer(instruction)):
         return instruction
 
     intent = _last_substantive_user_intent(previous)
@@ -270,14 +282,16 @@ def _resolve_effective_instruction(instruction: str, messages) -> str:
         return instruction
 
     supplements = _recent_supplements_after_intent(previous, intent)
-    supplements.append(instruction.strip())
+    if not _is_confirmation_answer(instruction):
+        supplements.append(instruction.strip())
     supplement_text = "\n".join(f"用户补充：{item}" for item in supplements)
-    return f"{intent}\n{supplement_text}"
+    confirmation_text = f"\n用户确认：{instruction.strip()}" if _is_confirmation_answer(instruction) else ""
+    return f"{intent}\n{supplement_text}{confirmation_text}"
 
 
 def _last_substantive_user_intent(messages: list[str]) -> str:
     for item in reversed(messages):
-        if not _is_scope_answer(item) and not _is_language_answer(item):
+        if not _is_scope_answer(item) and not _is_language_answer(item) and not _is_confirmation_answer(item):
             return item
     return ""
 
@@ -314,6 +328,42 @@ def _is_language_answer(text: str) -> bool:
             r"(用|改成|换成)?(中文|汉语|普通话|英文|英语|english|日文|日语|japanese|泰文|泰语|thai|韩文|韩语|korean|法文|法语|french|德文|德语|german|西班牙文|西班牙语|spanish)(讲稿|版本)?",
             normalized,
         )
+    )
+
+
+def _is_confirmation_answer(text: str) -> bool:
+    normalized = text.strip().lower()
+    return bool(
+        re.fullmatch(
+            r"(确认|确认执行|开始执行|执行|开始|开始生成|开始吧|可以执行|按计划执行|没问题|ok|okay|yes|go)",
+            normalized,
+        )
+    )
+
+
+def _needs_plan_confirmation(instruction: str) -> bool:
+    return not re.search(r"用户确认：", instruction)
+
+
+def _plan_message(deck, target_slides, scope_label: str, preset: AgentStylePreset, language_label: str, instruction: str) -> str:
+    language = language_label or "未指定，保持原讲稿语言"
+    slide_count = len(target_slides)
+    start_index = target_slides[0].index if target_slides else 0
+    end_index = target_slides[-1].index if target_slides else 0
+    scope_detail = f"{scope_label}，共 {slide_count} 页"
+    if slide_count > 1:
+        scope_detail = f"{scope_label}，共 {slide_count} 页，第 {start_index} 页到第 {end_index} 页"
+
+    return (
+        "我先给出执行计划，确认后再修改 PPT 备注。\n\n"
+        f"任务理解：{_compact_text(instruction, 140)}\n"
+        f"文件：{deck.filename}\n"
+        f"范围：{scope_detail}\n"
+        f"风格：{preset.name}（{preset.description}）\n"
+        f"语言：{language}\n"
+        "叙事：按整份 PPT 的连续演讲处理，第一页负责开场，中间页自然承接，最后一页收束。\n"
+        "写入：确认后会替换目标页的当前页讲稿，并更新 PPT 记忆。\n\n"
+        "请回复“确认执行”开始，或继续补充语言、范围、受众、风格等要求。"
     )
 
 
