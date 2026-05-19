@@ -222,7 +222,8 @@ export const useDeckStore = defineStore('deck', () => {
         chatMessages.value.push({
           role: 'assistant',
           content: response.message,
-          actions: response.actions
+          actions: response.actions,
+          ui: response.ui
         })
         addActivity('生成备注草稿', `${activeSlide.value?.title || '当前页'}，${response.text.length} 字`)
       })

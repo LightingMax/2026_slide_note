@@ -50,6 +50,20 @@ class AgentAction(BaseModel):
     content: str
 
 
+class AgentUiOption(BaseModel):
+    label: str
+    value: str
+    description: str = ""
+
+
+class AgentUi(BaseModel):
+    type: str
+    id: str
+    title: str
+    mode: str = "buttons"
+    options: list[AgentUiOption] = Field(default_factory=list)
+
+
 class ChatRequest(BaseModel):
     slide_id: str
     instruction: str
@@ -60,6 +74,7 @@ class ChatResponse(BaseModel):
     text: str
     message: str
     actions: list[AgentAction] = Field(default_factory=list)
+    ui: AgentUi | None = None
 
 
 class AgentRunCreate(BaseModel):

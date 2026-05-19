@@ -9,6 +9,7 @@ const deckStore = useDeckStore()
 const instruction = ref('')
 const loading = ref(false)
 const activeTab = ref('chat')
+const uiSelections = ref<Record<string, string>>({})
 
 async function send() {
   const value = instruction.value.trim()
@@ -17,6 +18,18 @@ async function send() {
   try {
     await deckStore.askAssistant(value)
     instruction.value = ''
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '生成失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+async function sendUiValue(value: string) {
+  if (!value || loading.value || deckStore.agentRunning) return
+  loading.value = true
+  try {
+    await deckStore.askAssistant(value)
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '生成失败')
   } finally {
@@ -126,6 +139,45 @@ async function clearContext() {
                     <p class="line-clamp-3 leading-5 text-slate-500 dark:text-slate-400">
                       {{ action.content }}
                     </p>
+                  </div>
+                </div>
+                <div
+                  v-if="message.ui?.options?.length"
+                  class="mt-3 rounded border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800"
+                >
+                  <div class="mb-2 text-xs font-medium text-slate-700 dark:text-slate-200">
+                    {{ message.ui.title }}
+                  </div>
+                  <el-radio-group
+                    v-if="message.ui.mode === 'radio'"
+                    v-model="uiSelections[`${index}-${message.ui.id}`]"
+                    class="flex flex-col items-start gap-2"
+                    :disabled="loading || deckStore.agentRunning"
+                    @change="(value: string | number | boolean) => sendUiValue(String(value))"
+                  >
+                    <el-radio
+                      v-for="option in message.ui.options"
+                      :key="option.value"
+                      :label="option.value"
+                    >
+                      <span class="text-sm">{{ option.label }}</span>
+                      <span v-if="option.description" class="ml-2 text-xs text-slate-500">
+                        {{ option.description }}
+                      </span>
+                    </el-radio>
+                  </el-radio-group>
+                  <div v-else class="flex flex-wrap gap-2">
+                    <el-button
+                      v-for="option in message.ui.options"
+                      :key="option.value"
+                      size="small"
+                      :type="message.ui.type === 'confirmation' ? 'primary' : 'default'"
+                      :loading="loading"
+                      :disabled="deckStore.agentRunning"
+                      @click="sendUiValue(option.value)"
+                    >
+                      {{ option.label }}
+                    </el-button>
                   </div>
                 </div>
               </article>

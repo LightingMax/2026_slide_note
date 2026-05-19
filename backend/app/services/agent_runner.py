@@ -84,6 +84,7 @@ def stream_run(run_id: str) -> Generator[str, None, None]:
                     "text": "",
                     "message": "我需要先确认讲稿语言：这次客户讲稿是要中文、英文、日文，还是其他语言？你可以回复“中文”“英文”“日文”“泰文”等。",
                     "actions": [],
+                    "ui": _language_choice_ui(),
                 },
             )
             yield _event("done", {"deck": deck.model_dump()})
@@ -98,6 +99,7 @@ def stream_run(run_id: str) -> Generator[str, None, None]:
                     "text": "",
                     "message": "我需要确认一下：这次是只修改当前页，还是应用到整份 PPT？你可以回复“当前页”或“全部文档”。",
                     "actions": [],
+                    "ui": _scope_choice_ui(),
                 },
             )
             yield _event("done", {"deck": deck.model_dump()})
@@ -118,6 +120,7 @@ def stream_run(run_id: str) -> Generator[str, None, None]:
                     "text": "",
                     "message": _plan_message(deck, target_slides, scope_label, preset, language_label, instruction),
                     "actions": [],
+                    "ui": _plan_confirmation_ui(),
                 },
             )
             yield _event("done", {"deck": deck.model_dump()})
@@ -321,11 +324,11 @@ def _is_language_answer(text: str) -> bool:
     normalized = text.strip().lower()
     return bool(
         re.fullmatch(
-            r"(中文|汉语|普通话|英文|英语|english|日文|日语|japanese|泰文|泰语|thai|韩文|韩语|korean|法文|法语|french|德文|德语|german|西班牙文|西班牙语|spanish)",
+            r"(中文|汉语|普通话|英文|英语|english|阿拉伯文|阿拉伯语|arabic|日文|日语|japanese|泰文|泰语|thai|韩文|韩语|korean|法文|法语|french|德文|德语|german|西班牙文|西班牙语|spanish)",
             normalized,
         )
         or re.fullmatch(
-            r"(用|改成|换成)?(中文|汉语|普通话|英文|英语|english|日文|日语|japanese|泰文|泰语|thai|韩文|韩语|korean|法文|法语|french|德文|德语|german|西班牙文|西班牙语|spanish)(讲稿|版本)?",
+            r"(用|改成|换成)?(中文|汉语|普通话|英文|英语|english|阿拉伯文|阿拉伯语|arabic|日文|日语|japanese|泰文|泰语|thai|韩文|韩语|korean|法文|法语|french|德文|德语|german|西班牙文|西班牙语|spanish)(讲稿|版本)?",
             normalized,
         )
     )
@@ -335,7 +338,7 @@ def _is_confirmation_answer(text: str) -> bool:
     normalized = text.strip().lower()
     return bool(
         re.fullmatch(
-            r"(确认|确认执行|开始执行|执行|开始|开始生成|开始吧|可以执行|按计划执行|没问题|ok|okay|yes|go)",
+            r"(确认|确认执行|开始执行|执行|开始|开始生成|开始吧|可以|可以了|好的|好|行|就这样|按这个来|可以执行|按计划执行|没问题|ok|okay|yes|go)",
             normalized,
         )
     )
@@ -365,6 +368,47 @@ def _plan_message(deck, target_slides, scope_label: str, preset: AgentStylePrese
         "写入：确认后会替换目标页的当前页讲稿，并更新 PPT 记忆。\n\n"
         "请回复“确认执行”开始，或继续补充语言、范围、受众、风格等要求。"
     )
+
+
+def _language_choice_ui() -> dict:
+    return {
+        "type": "choice",
+        "id": "language",
+        "title": "选择讲稿语言",
+        "mode": "radio",
+        "options": [
+            {"label": "中文", "value": "中文", "description": "适合中文接待或内部汇报。"},
+            {"label": "英文", "value": "英文", "description": "适合国际商务沟通。"},
+            {"label": "日文", "value": "日文", "description": "适合日本客户或日语场景。"},
+            {"label": "阿拉伯语", "value": "阿拉伯语", "description": "适合中东客户或阿语场景。"},
+            {"label": "泰文", "value": "泰文", "description": "适合泰语客户。"},
+        ],
+    }
+
+
+def _scope_choice_ui() -> dict:
+    return {
+        "type": "choice",
+        "id": "scope",
+        "title": "选择修改范围",
+        "mode": "buttons",
+        "options": [
+            {"label": "当前页", "value": "当前页", "description": "只替换当前选中页讲稿。"},
+            {"label": "全部文档", "value": "全部文档", "description": "替换整份 PPT 的讲稿。"},
+        ],
+    }
+
+
+def _plan_confirmation_ui() -> dict:
+    return {
+        "type": "confirmation",
+        "id": "execute_plan",
+        "title": "是否开始执行？",
+        "mode": "buttons",
+        "options": [
+            {"label": "确认执行", "value": "确认执行", "description": "按上述计划开始修改讲稿。"},
+        ],
+    }
 
 
 def _needs_language_clarification(instruction: str) -> bool:

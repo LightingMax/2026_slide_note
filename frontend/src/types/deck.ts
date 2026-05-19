@@ -29,6 +29,7 @@ export interface ChatMessage {
   role: 'user' | 'assistant' | 'agent'
   content: string
   actions?: AgentAction[]
+  ui?: AgentUi | null
 }
 
 export interface AgentAction {
@@ -42,6 +43,21 @@ export interface AgentResponse {
   text: string
   message: string
   actions: AgentAction[]
+  ui?: AgentUi | null
+}
+
+export interface AgentUiOption {
+  label: string
+  value: string
+  description?: string
+}
+
+export interface AgentUi {
+  type: 'choice' | 'confirmation'
+  id: string
+  title: string
+  mode: 'radio' | 'buttons'
+  options: AgentUiOption[]
 }
 
 export interface AgentStylePreset {
