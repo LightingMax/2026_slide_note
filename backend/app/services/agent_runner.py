@@ -5,7 +5,7 @@ from collections.abc import Generator
 from dataclasses import dataclass
 
 from app.models.deck import AgentRunCreate, AgentStylePreset
-from app.services.ark_client import generate_note
+from app.services.ark_client import generate_note, resolve_task_instruction
 from app.services.memory_store import build_memory_context, record_agent_note_change, record_user_intent
 from app.services.storage import load_deck, save_deck
 
@@ -76,7 +76,16 @@ def stream_run(run_id: str) -> Generator[str, None, None]:
         deck = load_deck(payload.deck_id)
         yield _event("progress", {"message": "正在读取演示文稿、当前页内容和原始备注。"})
 
-        instruction = _resolve_effective_instruction(payload.instruction, payload.messages)
+        fallback_instruction = _resolve_effective_instruction(payload.instruction, payload.messages)
+        instruction = resolve_task_instruction(
+            payload.instruction,
+            [item.model_dump() for item in payload.messages],
+            fallback_instruction,
+            deck.filename,
+            len(deck.slides),
+        )
+        if instruction != payload.instruction:
+            yield _event("progress", {"message": "已根据最近会话规整当前任务意图。"})
         if _needs_language_clarification(instruction):
             yield _event(
                 "assistant",
@@ -277,7 +286,12 @@ def _resolve_effective_instruction(instruction: str, messages) -> str:
     else:
         previous = user_messages
 
-    if not (_is_scope_answer(instruction) or _is_language_answer(instruction) or _is_confirmation_answer(instruction)):
+    if not (
+        _is_scope_answer(instruction)
+        or _is_language_answer(instruction)
+        or _is_confirmation_answer(instruction)
+        or _is_plan_revision(instruction, previous)
+    ):
         return instruction
 
     intent = _last_substantive_user_intent(previous)
@@ -294,6 +308,8 @@ def _resolve_effective_instruction(instruction: str, messages) -> str:
 
 def _last_substantive_user_intent(messages: list[str]) -> str:
     for item in reversed(messages):
+        if _is_plan_revision(item, messages):
+            continue
         if not _is_scope_answer(item) and not _is_language_answer(item) and not _is_confirmation_answer(item):
             return item
     return ""
@@ -307,7 +323,7 @@ def _recent_supplements_after_intent(messages: list[str], intent: str) -> list[s
             seen_intent = True
             supplements = []
             continue
-        if seen_intent and (_is_scope_answer(item) or _is_language_answer(item)):
+        if seen_intent and (_is_scope_answer(item) or _is_language_answer(item) or _is_plan_revision(item, messages)):
             supplements.append(item)
     return supplements[-4:]
 
@@ -332,7 +348,26 @@ def _is_language_answer(text: str) -> bool:
             normalized,
         )
         or bool(re.search(r"(我要|我想|需要|用|改成|换成).{0,12}(中文|汉语|普通话|英文|英语|english|阿拉伯文|阿拉伯语|arabic|日文|日语|japanese|泰文|泰语|thai|韩文|韩语|korean|法文|法语|french|德文|德语|german|西班牙文|西班牙语|spanish)", normalized))
+        or bool(re.search(r"(中文|汉语|普通话|英文|英语|english|阿拉伯文|阿拉伯语|arabic|日文|日语|japanese|泰文|泰语|thai|韩文|韩语|korean|法文|法语|french|德文|德语|german|西班牙文|西班牙语|spanish).{0,8}(客户|团队|语言|讲稿)", normalized))
     )
+
+
+def _is_plan_revision(text: str, previous_messages: list[str]) -> bool:
+    if not _has_pending_plan(previous_messages):
+        return False
+    return bool(
+        re.search(r"不对|更正|改成|换成|通知说|其实|还是|不是|客户是|团队|语言|受众|范围|风格", text, re.IGNORECASE)
+        or _has_style_intent(text)
+    )
+
+
+def _has_pending_plan(messages: list[str]) -> bool:
+    for item in reversed(messages[-8:]):
+        if _is_confirmation_answer(item):
+            return False
+        if "我先给出执行计划" in item or "确认后再修改 PPT 备注" in item:
+            return True
+    return False
 
 
 def _is_confirmation_answer(text: str) -> bool:

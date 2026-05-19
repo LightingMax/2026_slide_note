@@ -7,6 +7,66 @@ from app.core.config import get_settings
 from app.models.deck import AgentAction, ChatResponse, Slide
 
 
+def resolve_task_instruction(
+    instruction: str,
+    history: list[dict[str, str]],
+    fallback_instruction: str,
+    deck_filename: str,
+    slide_count: int,
+) -> str:
+    settings = get_settings()
+    if not settings.ark_api_key:
+        return fallback_instruction
+
+    client = OpenAI(base_url=settings.ark_base_url, api_key=settings.ark_api_key)
+    safe_history = [
+        {"role": item["role"], "content": item["content"]}
+        for item in history[-12:]
+        if item.get("role") in {"user", "assistant"} and item.get("content")
+    ]
+    prompt = (
+        "你是 Slide Note 的意图解析器，只负责理解用户当前这句话和最近会话的关系，不生成讲稿。"
+        "请判断当前输入是新任务、对上一份计划的补充/修订、回答澄清问题，还是确认执行。"
+        "你必须只输出 JSON，不要输出 Markdown。JSON 格式："
+        '{"relation":"new_task|revise_previous_plan|answer_clarification|confirm_plan",'
+        '"confidence":0.0,'
+        '"normalized_instruction":"规整后的完整任务指令，必须包含应继承的原始任务、用户补充、用户确认"}。'
+        "规整规则："
+        "如果用户说“可以、好的、按这个来、确认”等，且上一轮 assistant 给过执行计划，应作为 confirm_plan，并在 normalized_instruction 里保留原任务和补充，同时追加“用户确认：确认执行”。"
+        "如果用户说“哦不对、通知说、其实、改成、换成”等，应作为 revise_previous_plan，继承上一份计划的范围、受众、文件和任务，只覆盖用户明确修改的字段。"
+        "如果用户回答语言、范围或风格澄清，应作为 answer_clarification，继承原任务并追加补充。"
+        "如果确实与上一份计划无关，才作为 new_task。"
+        "不要虚构用户没有说过的语言或范围；但可以保留上一轮计划中已经确定的信息。"
+        f"\n\n当前文件：{deck_filename}，共 {slide_count} 页。"
+        f"\n当前用户输入：{instruction}"
+    )
+    messages = [
+        {"role": "system", "content": "你是严格 JSON 意图解析器。"},
+        *safe_history,
+        {"role": "user", "content": prompt},
+    ]
+
+    try:
+        response = client.responses.create(model=settings.ark_model, input=messages)
+    except (AuthenticationError, APIError):
+        return fallback_instruction
+
+    raw_text = getattr(response, "output_text", "") or str(response)
+    try:
+        payload = json.loads(_extract_json(raw_text))
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return fallback_instruction
+
+    relation = str(payload.get("relation") or "")
+    normalized = str(payload.get("normalized_instruction") or "").strip()
+    confidence = _safe_float(payload.get("confidence"), 0.0)
+    if relation not in {"new_task", "revise_previous_plan", "answer_clarification", "confirm_plan"}:
+        return fallback_instruction
+    if confidence < 0.55 or not normalized:
+        return fallback_instruction
+    return normalized
+
+
 def generate_note(
     slide: Slide,
     instruction: str,
@@ -185,6 +245,13 @@ def _sanitize_speech_content(content: str) -> str:
     cleaned = re.sub(r"\bWelcome to\s*[.。]", "Welcome.", cleaned)
     cleaned = re.sub(r"\s{2,}", " ", cleaned)
     return cleaned.strip()
+
+
+def _safe_float(value, fallback: float) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return fallback
 
 
 def _extract_json(raw_text: str) -> str:
