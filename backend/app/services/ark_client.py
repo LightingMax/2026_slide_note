@@ -28,6 +28,8 @@ def generate_note(
         f'{slide.id}","label":"替换当前页备注","content":"可直接放入备注区的目标语言播报稿"}}]}}。'
         f"actions[0].slide_id 必须严格等于 {slide.id}。"
         "content 必须使用叙事约束中指定的目标语言，适合语音播报：自然、清晰、短句、不要使用项目符号堆砌。"
+        "content 必须是最终可直接朗读版本，禁止出现占位符、二选一表达、斜杠候选、括号候选、变量提示或待替换文本。"
+        "例如不要写 Good morning/afternoon、各位来宾（或客户）、[公司名]、{时间}、请根据现场调整。"
         f"\n\n风格要求：\n{style_instruction or '自然口语化讲稿风格'}"
         f"\n\n整份 PPT 叙事约束：\n{deck_context or '这是单页任务，围绕当前页内容生成讲稿。'}"
         "\n\n幻灯片标题："
@@ -95,6 +97,7 @@ def _response_from_payload(payload: dict, slide_id: str) -> ChatResponse:
         if not content:
             continue
         content = _extract_loose_content(content).strip()
+        content = _sanitize_speech_content(content)
         actions.append(
             AgentAction(
                 type="replace_notes",
@@ -163,6 +166,25 @@ def _extract_loose_content(text: str) -> str:
     if end <= first_quote:
         return text
     return stripped[first_quote + 1 : end].replace('\\"', '"')
+
+
+def _sanitize_speech_content(content: str) -> str:
+    replacements = [
+        (r"Good morning/afternoon,?\s*", "Good morning, "),
+        (r"good morning/afternoon,?\s*", "Good morning, "),
+        (r"早上好/下午好，?", "大家好，"),
+        (r"上午好/下午好，?", "大家好，"),
+    ]
+    cleaned = content
+    for pattern, replacement in replacements:
+        cleaned = re.sub(pattern, replacement, cleaned)
+    cleaned = re.sub(r"\[(?:[^\[\]]{1,30})\]", "", cleaned)
+    cleaned = re.sub(r"\{(?:[^{}]{1,30})\}", "", cleaned)
+    cleaned = re.sub(r"（或[^）]{1,20}）", "", cleaned)
+    cleaned = re.sub(r"\(or [^)]{1,30}\)", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\bWelcome to\s*[.。]", "Welcome.", cleaned)
+    cleaned = re.sub(r"\s{2,}", " ", cleaned)
+    return cleaned.strip()
 
 
 def _extract_json(raw_text: str) -> str:

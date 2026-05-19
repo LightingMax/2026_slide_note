@@ -331,6 +331,7 @@ def _is_language_answer(text: str) -> bool:
             r"(用|改成|换成)?(中文|汉语|普通话|英文|英语|english|阿拉伯文|阿拉伯语|arabic|日文|日语|japanese|泰文|泰语|thai|韩文|韩语|korean|法文|法语|french|德文|德语|german|西班牙文|西班牙语|spanish)(讲稿|版本)?",
             normalized,
         )
+        or bool(re.search(r"(我要|我想|需要|用|改成|换成).{0,12}(中文|汉语|普通话|英文|英语|english|阿拉伯文|阿拉伯语|arabic|日文|日语|japanese|泰文|泰语|thai|韩文|韩语|korean|法文|法语|french|德文|德语|german|西班牙文|西班牙语|spanish)", normalized))
     )
 
 
@@ -494,8 +495,6 @@ def _has_style_intent(text: str) -> bool:
 
 
 def _language_context(instruction: str) -> str:
-    if _mentions_middle_east(instruction) and not re.search(r"阿拉伯文|阿拉伯语|arabic", instruction, re.IGNORECASE):
-        return "目标语言：阿拉伯语。用户提到中东客户时，默认生成阿拉伯语讲稿。content 字段必须使用阿拉伯语，不要输出中文讲稿。"
     if re.search(r"阿拉伯文|阿拉伯语|arabic", instruction, re.IGNORECASE):
         return "目标语言：阿拉伯语。content 字段必须使用阿拉伯语。"
     if re.search(r"英文|英语|english", instruction, re.IGNORECASE):
@@ -508,11 +507,13 @@ def _language_context(instruction: str) -> str:
         return "目标语言：日文。用户已确认使用日文时，content 字段必须使用日文。"
     if re.search(r"泰文|泰语|thai", instruction, re.IGNORECASE):
         return "目标语言：泰文。content 字段必须使用泰文。"
+    if _mentions_middle_east(instruction):
+        return "目标语言：阿拉伯语。用户提到中东客户时，默认生成阿拉伯语讲稿。content 字段必须使用阿拉伯语，不要输出中文讲稿。"
     return ""
 
 
 def _language_label(instruction: str) -> str:
-    if _mentions_middle_east(instruction) or re.search(r"阿拉伯文|阿拉伯语|arabic", instruction, re.IGNORECASE):
+    if re.search(r"阿拉伯文|阿拉伯语|arabic", instruction, re.IGNORECASE):
         return "阿拉伯语"
     if re.search(r"英文|英语|english", instruction, re.IGNORECASE):
         return "英文"
@@ -524,6 +525,8 @@ def _language_label(instruction: str) -> str:
         return "日文"
     if re.search(r"泰文|泰语|thai", instruction, re.IGNORECASE):
         return "泰文"
+    if _mentions_middle_east(instruction):
+        return "阿拉伯语"
     return ""
 
 
