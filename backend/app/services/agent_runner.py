@@ -14,27 +14,27 @@ STYLE_PRESETS = {
     "narration": AgentStylePreset(
         id="narration",
         name="自然讲稿",
-        description="自然口语、短句、转场顺滑，适合直接语音播报。",
+        description="自然口语、短句、转场顺滑，适合直接语音播报。保留原文关键信息，避免书面化堆砌，按连续演讲组织内容。",
     ),
     "business": AgentStylePreset(
         id="business",
         name="商务汇报",
-        description="正式、克制、结论清晰，适合路演、汇报和商业沟通。",
+        description="正式、克制、结论清晰，适合路演、汇报和商业沟通。先讲结论和业务价值，再解释依据与落地方式，避免夸张口号。",
     ),
     "children": AgentStylePreset(
         id="children",
         name="小朋友友好",
-        description="亲切、简单、少术语，多用类比，适合低龄听众理解。",
+        description="亲切、简单、少术语，多用生活化类比，适合低龄听众理解。只在第一页问候，后续页面自然承接，不重复开场。",
     ),
     "executive": AgentStylePreset(
         id="executive",
         name="高管简报",
-        description="先结论后依据，压缩细节，强调判断、风险和下一步。",
+        description="先结论后依据，压缩细节，强调判断、风险、收益和下一步。语言直接，减少铺垫，突出管理层关心的决策信息。",
     ),
     "sales": AgentStylePreset(
         id="sales",
         name="产品演示",
-        description="突出痛点、价值、差异化和行动号召，语气更有感染力。",
+        description="突出痛点、价值、差异化和行动号召，语气更有感染力。每页围绕客户收益展开，避免空泛宣传。",
     ),
 }
 
@@ -77,13 +77,16 @@ def stream_run(run_id: str) -> Generator[str, None, None]:
         yield _event("progress", {"message": "正在读取演示文稿、当前页内容和原始备注。"})
 
         fallback_instruction = _resolve_effective_instruction(payload.instruction, payload.messages)
-        instruction = resolve_task_instruction(
-            payload.instruction,
-            [item.model_dump() for item in payload.messages],
-            fallback_instruction,
-            deck.filename,
-            len(deck.slides),
-        )
+        if _should_use_local_intent_resolution(payload.instruction, payload.messages):
+            instruction = fallback_instruction
+        else:
+            instruction = resolve_task_instruction(
+                payload.instruction,
+                [item.model_dump() for item in payload.messages],
+                fallback_instruction,
+                deck.filename,
+                len(deck.slides),
+            )
         if instruction != payload.instruction:
             yield _event("progress", {"message": "已根据最近会话规整当前任务意图。"})
         if _needs_language_clarification(instruction):
@@ -235,6 +238,10 @@ def _resolve_target_slides(slides, slide_id: str, deck_scope: bool):
 def _is_deck_scope(instruction: str) -> bool:
     text = instruction.lower()
     patterns = [
+        r"范围[：:\s]*(整份|全部|所有|全)",
+        r"范围.*整份\s*(演示文稿|ppt|幻灯片|文档)",
+        r"范围.*第\s*1\s*页.*第\s*\d+\s*页",
+        r"整份.*第\s*1\s*页.*第\s*\d+\s*页",
         r"这次来的是.*客户.*讲稿",
         r"(客户|外宾|来宾|访客).*讲稿",
         r"给我.*讲稿",
@@ -276,11 +283,7 @@ def _is_current_slide_scope(instruction: str) -> bool:
 
 
 def _resolve_effective_instruction(instruction: str, messages) -> str:
-    user_messages = [
-        item.content.strip()
-        for item in messages
-        if item.role == "user" and item.content and item.content.strip()
-    ]
+    user_messages = _user_message_contents(messages)
     if user_messages and user_messages[-1] == instruction.strip():
         previous = user_messages[:-1]
     else:
@@ -290,6 +293,7 @@ def _resolve_effective_instruction(instruction: str, messages) -> str:
         _is_scope_answer(instruction)
         or _is_language_answer(instruction)
         or _is_confirmation_answer(instruction)
+        or _is_plan_revision(instruction, messages)
         or _is_plan_revision(instruction, previous)
     ):
         return instruction
@@ -304,6 +308,50 @@ def _resolve_effective_instruction(instruction: str, messages) -> str:
     supplement_text = "\n".join(f"用户补充：{item}" for item in supplements)
     confirmation_text = f"\n用户确认：{instruction.strip()}" if _is_confirmation_answer(instruction) else ""
     return f"{intent}\n{supplement_text}{confirmation_text}"
+
+
+def _should_use_local_intent_resolution(instruction: str, messages) -> bool:
+    if "用户确认：" in instruction:
+        return True
+
+    user_messages = _user_message_contents(messages)
+    if user_messages and user_messages[-1] == instruction.strip():
+        previous = user_messages[:-1]
+    else:
+        previous = user_messages
+
+    return bool(
+        _is_frontend_style_plan(instruction)
+        or _is_scope_answer(instruction)
+        or _is_language_answer(instruction)
+        or _is_confirmation_answer(instruction)
+        or _is_plan_revision(instruction, messages)
+        or _is_plan_revision(instruction, previous)
+    )
+
+
+def _user_message_contents(messages) -> list[str]:
+    return [
+        _message_content(item).strip()
+        for item in messages
+        if _message_role(item) == "user" and _message_content(item).strip()
+    ]
+
+
+def _is_frontend_style_plan(instruction: str) -> bool:
+    return bool("风格模板" in instruction and _is_deck_scope(instruction))
+
+
+def _message_role(item) -> str:
+    if isinstance(item, dict):
+        return str(item.get("role") or "")
+    return str(getattr(item, "role", "") or "")
+
+
+def _message_content(item) -> str:
+    if isinstance(item, dict):
+        return str(item.get("content") or "")
+    return str(getattr(item, "content", "") or "")
 
 
 def _last_substantive_user_intent(messages: list[str]) -> str:
@@ -363,9 +411,11 @@ def _is_plan_revision(text: str, previous_messages: list[str]) -> bool:
 
 def _has_pending_plan(messages: list[str]) -> bool:
     for item in reversed(messages[-8:]):
-        if _is_confirmation_answer(item):
+        content = _message_content(item) if not isinstance(item, str) else item
+        role = _message_role(item)
+        if (role == "user" or isinstance(item, str)) and _is_confirmation_answer(content):
             return False
-        if "我先给出执行计划" in item or "确认后再修改 PPT 备注" in item:
+        if "我先给出执行计划" in content or "确认后再修改 PPT 备注" in content:
             return True
     return False
 

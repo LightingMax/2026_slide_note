@@ -184,13 +184,13 @@ async function clearContext() {
             </div>
             <el-empty
               v-if="deckStore.chatMessages.length === 0"
-              description="当前讲稿已经准备好，你希望迁移成什么风格？"
+              description="当前讲稿已经准备好，选择一个模板迁移整份 PPT。"
             >
               <div class="grid grid-cols-2 gap-2">
-                <el-button @click="applyStyle('business')">商务汇报</el-button>
-                <el-button @click="applyStyle('children')">小朋友友好</el-button>
-                <el-button @click="applyStyle('executive')">高管简报</el-button>
-                <el-button @click="applyStyle('sales')">产品演示</el-button>
+                <el-button :loading="loading" :disabled="deckStore.agentRunning" @click="applyStyle('business')">商务汇报</el-button>
+                <el-button :loading="loading" :disabled="deckStore.agentRunning" @click="applyStyle('children')">小朋友友好</el-button>
+                <el-button :loading="loading" :disabled="deckStore.agentRunning" @click="applyStyle('executive')">高管简报</el-button>
+                <el-button :loading="loading" :disabled="deckStore.agentRunning" @click="applyStyle('sales')">产品演示</el-button>
               </div>
             </el-empty>
           </div>

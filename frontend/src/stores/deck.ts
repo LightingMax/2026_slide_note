@@ -132,25 +132,37 @@ export const useDeckStore = defineStore('deck', () => {
     }
   }
 
-  async function askAssistant(instruction: string): Promise<AgentResponse | null> {
+  async function askAssistant(
+    instruction: string,
+    stylePreset = 'auto',
+    visibleInstruction = instruction
+  ): Promise<AgentResponse | null> {
     if (!activeDeck.value || !activeSlideId.value) return null
     if (agentRunning.value) return null
-    chatMessages.value.push({ role: 'user', content: instruction })
-    addActivity('发送生成要求', instruction)
+    chatMessages.value.push({ role: 'user', content: visibleInstruction })
+    addActivity('发送生成要求', visibleInstruction)
     const run = await createAgentRun(
       activeDeck.value.id,
       activeSlideId.value,
       instruction,
       chatMessages.value,
-      'auto'
+      stylePreset
     )
     activeRunId.value = run.run_id
     return streamAgentRun(run.run_id)
   }
 
   async function applyStyleTemplate(style: AgentStylePreset) {
-    const instruction = `请把当前页讲稿迁移成「${style.name}」风格。风格要求：${style.description}`
-    return askAssistant(instruction)
+    if (!activeDeck.value) return null
+    const slideCount = activeDeck.value.slides.length
+    const instruction = [
+      `请将当前文件 ${activeDeck.value.filename} 的整份 PPT 讲稿迁移成「${style.name}」风格。`,
+      `范围：整份演示文稿，共 ${slideCount} 页，第 1 页到第 ${slideCount} 页。`,
+      `风格模板：${style.description}`,
+      '执行要求：按整份 PPT 的连续演讲处理，第一页负责开场，中间页自然承接，最后一页收束；确认后再替换目标页备注。'
+    ].join('\n')
+    const visibleInstruction = `将整份 PPT 迁移成「${style.name}」风格`
+    return askAssistant(instruction, style.id, visibleInstruction)
   }
 
   async function stopAgentRun() {
